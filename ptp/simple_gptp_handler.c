@@ -148,6 +148,8 @@ static void packetHandler(const struct Packet_packet *packet, void *context)
 
     puts("ptp message okay");
 
+    printf("mt: %d\n", PTP_GET_MESSAGETYPE(ptpPacket->transportSpecific_messageType));
+
     switch(PTP_GET_MESSAGETYPE(ptpPacket->transportSpecific_messageType))
     {
     case PTP_MESSAGE_TYPE_PDELAY_REQ:
