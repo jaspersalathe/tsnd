@@ -12,6 +12,7 @@
 
 #include "common.h"
 #include "port.h"
+#include "packet.h"
 #include "ethernet.h"
 #include "ptp/ptp_config.h"
 
@@ -70,7 +71,14 @@ struct PTP_portId
 
 struct PTP_timestamp
 {
-    uint8_t t[10];
+    uint16_t sec_msb;
+    uint32_t sec_lsb;
+    uint32_t nsec;
+} PACKED;
+
+struct PTP_timeinterval
+{
+    int64_t scalNSeconds;
 } PACKED;
 
 struct PTP_header
@@ -86,7 +94,7 @@ struct PTP_header
     uint8_t domainNumber;
     uint8_t reserved1;
     uint16_t flags;
-    uint8_t correction[8];
+    struct PTP_timeinterval correction;
     uint8_t reserved2[4];
     struct PTP_portId sourcePortId;
     uint16_t sequId;
@@ -103,7 +111,7 @@ struct PTP_announce
     uint8_t grandmasterPrio1;
     uint32_t grandmasterClockQuality;
     uint8_t grandmasterPrio2;
-    uint8_t grandmasterId[8];
+    uint8_t grandmasterId[PTP_CLOCKID_LEN];
     uint16_t stepsRemoved;
     uint8_t timeSource;
 } PACKED;
@@ -111,46 +119,46 @@ struct PTP_announce
 struct PTP_sync
 {
     struct PTP_header hdr;
-    uint8_t originTimestamp[10];
+    struct PTP_timestamp originTimestamp;
 } PACKED;
 
 struct PTP_delayReq
 {
     struct PTP_header hdr;
-    uint8_t originTimestamp[10];
+    struct PTP_timestamp originTimestamp;
 } PACKED;
 
 struct PTP_followUp
 {
     struct PTP_header hdr;
-    uint8_t originTimestamp[10];
+    struct PTP_timestamp originTimestamp;
 } PACKED;
 
 struct PTP_delayResp
 {
     struct PTP_header hdr;
-    uint8_t receiveTimestamp[10];
+    struct PTP_timestamp receiveTimestamp;
     struct PTP_portId requestingPortId;
 } PACKED;
 
 struct PTP_pDelayReq
 {
     struct PTP_header hdr;
-    uint8_t originTimestamp[10];
+    struct PTP_timestamp originTimestamp;
     uint8_t reserved1[10];
 } PACKED;
 
 struct PTP_pDelayResp
 {
     struct PTP_header hdr;
-    uint8_t receiveTimestamp[10];
+    struct PTP_timestamp receiveTimestamp;
     struct PTP_portId requestingPortId;
 } PACKED;
 
 struct PTP_pDelayRespFollowUp
 {
     struct PTP_header hdr;
-    uint8_t receiveTimestamp[10];
+    struct PTP_timestamp receiveTimestamp;
     struct PTP_portId requestingPortId;
 } PACKED;
 
@@ -184,12 +192,14 @@ int32_t PTP_isPacketValid(const uint8_t *packet, const uint32_t len, const struc
 /*
  * Parameters:
  *  - inPacket: might contain a packet, to which the packet to be generated is the response
- *  - inLen: length of inPacket
  *  - outPacket: buffer to write packet to be generated
  *  - outLen: when entering, length of the buffer outPacket, when exiting with success length of the packet generated
  *  - conf: configuration of ptp stack
  *  - msgType: type of the message to be generated
  *  - port: port the generated message is to be sent to
+ *  - param: contains parameters, if needed, dependent on messagetype
+ *    - PDelayResp: timestamp of PDelayReq
+ *    - PDelayRespFollowUp: timestamp of PDelayResp
  *
  * Return values:
  *             0: success
@@ -198,7 +208,9 @@ int32_t PTP_isPacketValid(const uint8_t *packet, const uint32_t len, const struc
  *            -3: unknown message
  *
  */
-int32_t PTP_initMsg(const uint8_t *inPacket, const uint32_t inLen, uint8_t *outPacket, uint32_t *outLen, const struct PTPConfig *conf, const uint8_t msgType, const struct Port *port);
+int32_t PTP_initMsg(const struct Packet_packet *inPacket, uint8_t *outPacket, uint32_t *outLen, const struct PTPConfig *conf, const uint8_t msgType, const struct Port *port, void *param);
 
+void PTP_convertTimestampPTPtoL(const struct PTP_timestamp *ptp, struct Packet_timestamp *l);
+void PTP_convertTimestampLtoPTP(const struct Packet_timestamp *l, struct PTP_timestamp *ptp);
 
 #endif /* PTP_H_ */

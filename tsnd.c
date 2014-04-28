@@ -41,6 +41,8 @@ void pcap_callback(u_char* args, const struct pcap_pkthdr* packet_header, const 
     if(p.packet == NULL)
         return;
     memcpy(p.packet, packet, p.len);
+    p.t.t.tv_sec = packet_header->ts.tv_sec;
+    p.t.t.tv_nsec = packet_header->ts.tv_usec * 1000;
     HandlerTable_handlePacket(&handlerTable, &p);
     free(p.packet);
 }

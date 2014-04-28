@@ -164,6 +164,7 @@ static void packetHandler(const struct Packet_packet *packet, void *context)
 static void handlePDelayReq(const struct Packet_packet *pIn, const struct PTP_pDelayReq *packet, struct SimpleGPTPHandler_state *state)
 {
     struct Packet_packet pOut;
+    struct Packet_timestamp ts;
     struct Port *p = &(state->ports[pIn->port]);
     puts("got PDelayReq");
 
@@ -172,15 +173,17 @@ static void handlePDelayReq(const struct Packet_packet *pIn, const struct PTP_pD
     if(pOut.packet == NULL)
         return;
     pOut.port = pIn->port;
+    ts = pIn->t;
 
-    if(PTP_initMsg(pIn->packet, pIn->len, pOut.packet, &(pOut.len), state->conf, PTP_MESSAGE_TYPE_PDELAY_RESP, p) != 0)
+    if(PTP_initMsg(pIn, pOut.packet, &(pOut.len), state->conf, PTP_MESSAGE_TYPE_PDELAY_RESP, p, &(ts)) != 0)
         goto end;
     if(Port_send(p, &pOut) != 0)
         goto end;
     puts("sent pdelay_resp");
 
     pOut.len = 2000;
-    if(PTP_initMsg(pIn->packet, pIn->len, pOut.packet, &(pOut.len), state->conf, PTP_MESSAGE_TYPE_PDELAY_RESP_FOLLOW_UP, p) != 0)
+    ts = pOut.t;
+    if(PTP_initMsg(pIn, pOut.packet, &(pOut.len), state->conf, PTP_MESSAGE_TYPE_PDELAY_RESP_FOLLOW_UP, p, &(ts)) != 0)
         goto end;
     if(Port_send(p, &pOut) != 0)
         goto end;

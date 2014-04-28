@@ -17,8 +17,8 @@ const uint8_t PTP_ETH_MAC_P2P[ETHERNET_MAC_LEN] = {0x01, 0x80, 0xC2, 0x00, 0x00,
 
 
 int32_t PTP_init_PDelay_Req(struct PTP_pDelayReq *outPacket, const struct PTPConfig *conf, const struct Port *port);
-int32_t PTP_init_PDelay_Resp(const uint8_t *inPacket, const uint32_t inLen, struct PTP_pDelayResp *outPacket, const struct PTPConfig *conf, const struct Port *port);
-int32_t PTP_init_PDelay_Resp_FollowUp(const uint8_t *inPacket, const uint32_t inLen, struct PTP_pDelayRespFollowUp *outPacket, const struct PTPConfig *conf, const struct Port *port);
+int32_t PTP_init_PDelay_Resp(const struct Packet_packet *inPacket, struct PTP_pDelayResp *outPacket, const struct PTPConfig *conf, const struct Port *port, const struct Packet_timestamp *ts);
+int32_t PTP_init_PDelay_Resp_FollowUp(const struct Packet_packet *inPacket, struct PTP_pDelayRespFollowUp *outPacket, const struct PTPConfig *conf, const struct Port *port, const struct Packet_timestamp *ts);
 
 
 uint8_t PTP_getControlField(const uint8_t messageType)
@@ -115,7 +115,7 @@ int32_t PTP_isPacketValid(const uint8_t *packet, const uint32_t len, const struc
  *            -3: unknown message
  *
  */
-int32_t PTP_initMsg(const uint8_t *inPacket, const uint32_t inLen, uint8_t *outPacket, uint32_t *outLen, const struct PTPConfig *conf, const uint8_t msgType, const struct Port *port)
+int32_t PTP_initMsg(const struct Packet_packet *inPacket, uint8_t *outPacket, uint32_t *outLen, const struct PTPConfig *conf, const uint8_t msgType, const struct Port *port, void *param)
 {
     uint32_t myLen;
     struct Ethernet_header *outEHdr = (struct Ethernet_header*)outPacket;
@@ -154,7 +154,7 @@ int32_t PTP_initMsg(const uint8_t *inPacket, const uint32_t inLen, uint8_t *outP
     outPHdr->messageLen = 0; // this is calculated in specific message initializer
     outPHdr->domainNumber = conf->defaultDS.domainNumber;
     outPHdr->flags = PTPConfig_generateFlags(conf, msgType);
-    memset(outPHdr->correction, 0, 8);
+    memset(&(outPHdr->correction), 0, 8);
     memcpy(outPHdr->sourcePortId.clockId, conf->defaultDS.clockId, PTP_CLOCKID_LEN);
     outPHdr->sourcePortId.portNo = Common_lToNu16(port->portIdx);
     outPHdr->sequId = 0; // this is set by specific message initializer
@@ -172,9 +172,9 @@ int32_t PTP_initMsg(const uint8_t *inPacket, const uint32_t inLen, uint8_t *outP
     case PTP_MESSAGE_TYPE_PDELAY_REQ:
         return PTP_init_PDelay_Req((struct PTP_pDelayReq*)outPHdr, conf, port);
     case PTP_MESSAGE_TYPE_PDELAY_RESP:
-        return PTP_init_PDelay_Resp(inPacket, inLen, (struct PTP_pDelayResp*)outPHdr, conf, port);
+        return PTP_init_PDelay_Resp(inPacket, (struct PTP_pDelayResp*)outPHdr, conf, port, param);
     case PTP_MESSAGE_TYPE_PDELAY_RESP_FOLLOW_UP:
-        return PTP_init_PDelay_Resp_FollowUp(inPacket, inLen, (struct PTP_pDelayRespFollowUp*)outPHdr, conf, port);
+        return PTP_init_PDelay_Resp_FollowUp(inPacket, (struct PTP_pDelayRespFollowUp*)outPHdr, conf, port, param);
     case PTP_MESSAGE_TYPE_FOLLOW_UP:
         return -3;
     case PTP_MESSAGE_TYPE_DELAY_RESP:
@@ -201,21 +201,21 @@ int32_t PTP_init_PDelay_Req(struct PTP_pDelayReq *outPacket, const struct PTPCon
     outPacket->hdr.messageLen = Common_lToNu16(50);
 
     // set message content
-    memset(outPacket->originTimestamp, 0, 10);
+    memset(&(outPacket->originTimestamp), 0, 10);
     // could be zero, if unknown
 
     return 0;
 }
 
-int32_t PTP_init_PDelay_Resp(const uint8_t *inPacket, const uint32_t inLen, struct PTP_pDelayResp *outPacket, const struct PTPConfig *conf, const struct Port *port)
+int32_t PTP_init_PDelay_Resp(const struct Packet_packet *inPacket, struct PTP_pDelayResp *outPacket, const struct PTPConfig *conf, const struct Port *port, const struct Packet_timestamp *ts)
 {
     uint32_t inEthLen, inReqLen = PTP_getRequiredLength(PTP_MESSAGE_TYPE_PDELAY_REQ);
     const struct PTP_pDelayReq *inReq;
 
     if(inPacket == NULL || outPacket == NULL || conf == NULL || port == NULL)
         return -1;
-    inEthLen = Ethernet_getHeaderLength(inPacket, inLen);
-    if(inLen < inReqLen + inEthLen)
+    inEthLen = Ethernet_getHeaderLength(inPacket->packet, inPacket->len);
+    if(inPacket->len < inReqLen + inEthLen)
         return -1;
     inReq = (struct PTP_pDelayReq*)(inPacket + inEthLen);
 
@@ -226,21 +226,21 @@ int32_t PTP_init_PDelay_Resp(const uint8_t *inPacket, const uint32_t inLen, stru
     outPacket->hdr.messageLen = Common_lToNu16(50);
 
     // set message content
-    memset(outPacket->receiveTimestamp, 0, 10); // TODO: this needs data
+    PTP_convertTimestampLtoPTP(ts, &(outPacket->receiveTimestamp));
     memcpy(&(outPacket->requestingPortId), &(inReq->hdr.sourcePortId), sizeof(struct PTP_portId));
 
     return 0;
 }
 
-int32_t PTP_init_PDelay_Resp_FollowUp(const uint8_t *inPacket, const uint32_t inLen, struct PTP_pDelayRespFollowUp *outPacket, const struct PTPConfig *conf, const struct Port *port)
+int32_t PTP_init_PDelay_Resp_FollowUp(const struct Packet_packet *inPacket, struct PTP_pDelayRespFollowUp *outPacket, const struct PTPConfig *conf, const struct Port *port, const struct Packet_timestamp *ts)
 {
     uint32_t inEthLen, inReqLen = PTP_getRequiredLength(PTP_MESSAGE_TYPE_PDELAY_REQ);
     const struct PTP_pDelayReq *inReq;
 
     if(inPacket == NULL || outPacket == NULL || conf == NULL || port == NULL)
         return -1;
-    inEthLen = Ethernet_getHeaderLength(inPacket, inLen);
-    if(inLen < inReqLen + inEthLen)
+    inEthLen = Ethernet_getHeaderLength(inPacket->packet, inPacket->len);
+    if(inPacket->len < inReqLen + inEthLen)
         return -1;
     inReq = (struct PTP_pDelayReq*)(inPacket + inEthLen);
 
@@ -251,8 +251,26 @@ int32_t PTP_init_PDelay_Resp_FollowUp(const uint8_t *inPacket, const uint32_t in
     outPacket->hdr.messageLen = Common_lToNu16(50);
 
     // set message content
-    memset(outPacket->receiveTimestamp, 0, 10); // TODO: this needs data
+    PTP_convertTimestampLtoPTP(ts, &(outPacket->receiveTimestamp));
     memcpy(&(outPacket->requestingPortId), &(inReq->hdr.sourcePortId), sizeof(struct PTP_portId));
 
     return 0;
+}
+void PTP_convertTimestampPTPtoL(const struct PTP_timestamp *ptp, struct Packet_timestamp *l)
+{
+    if(ptp == NULL || l == NULL)
+        return;
+
+    l->t.tv_sec = Common_nToLu32(ptp->sec_lsb);
+    l->t.tv_nsec = Common_nToLu64(ptp->nsec);
+}
+
+void PTP_convertTimestampLtoPTP(const struct Packet_timestamp *l, struct PTP_timestamp *ptp)
+{
+    if(ptp == NULL || l == NULL)
+        return;
+
+    ptp->sec_msb = 0;
+    ptp->sec_lsb = Common_lToNu32(l->t.tv_sec);
+    ptp->nsec = Common_lToNu64(l->t.tv_nsec);
 }

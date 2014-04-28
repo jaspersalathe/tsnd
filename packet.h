@@ -9,6 +9,13 @@
 #define PACKET_H_
 
 #include <inttypes.h>
+#include <time.h>
+
+
+struct Packet_timestamp
+{
+    struct timespec t;
+};
 
 struct Packet_packet
 {
@@ -16,6 +23,7 @@ struct Packet_packet
     uint8_t port;
     uint8_t *packet;
     uint32_t len;
+    struct Packet_timestamp t;
 };
 
 
