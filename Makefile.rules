@@ -1,0 +1,66 @@
+ifeq ($(CFG), Release)
+BUILDPATH = Release
+CFLAGS = -O2
+endif
+ifeq ($(CFG), Debug)
+BUILDPATH = Debug
+CFLAGS = -O0 -g3
+endif
+
+CC = gcc
+LD = gcc
+MKDIR = mkdir
+RM = rm
+CP = cp
+
+LIBS = pcap sndfile
+
+CFLAGS += -Wall -std=gnu99
+
+CAPPSRC = ./
+CAPPSRC += ./headers
+CAPPSRC += ./ptp
+
+INC = ./
+
+DEPFLAGS = 
+
+TARGET = $(BUILDPATH)/tsnd
+
+LIBFLAGS += $(addprefix -L, $(LIB_PATH))
+LIBFLAGS += $(addprefix -l, $(LIBS))
+
+C_SRC = $(wildcard $(addsuffix /*.c, $(CAPPSRC)))
+
+_COBJ = $(C_SRC:.c=.o)
+COBJ = $(patsubst %, $(BUILDPATH)/%, $(_COBJ))
+
+CFLAGS += $(addprefix -I, $(INC))
+CFLAGS += $(addprefix -D, $(DEFINES))
+
+
+# build target
+$(TARGET): begin exec final
+
+exec: $(TARGET).exec
+
+begin:
+	$(MKDIR) -p $(@D)
+	
+final:
+	$(CP) $(TARGET).exec $(TARGET)
+
+.SECONDARY : $(TARGET).exec
+.PRECIOUS : $(COBJ)
+
+%.exec:  $(COBJ)
+	$(LD)  $(LDFLAGS) $(AOBJ) $(COBJ) $(LIBFLAGS) --output  $@
+
+$(COBJ) : $(BUILDPATH)/%.o : %.c
+	$(MKDIR) -p $(@D)
+	$(CC) -c $(DEPFLAGS) $(CFLAGS) $< -o $@
+
+clean:
+	$(RM) -rf $(BUILDPATH)
+
+.PHONY : $(TARGET) begin exec clean final

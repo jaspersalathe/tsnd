@@ -1,0 +1,2 @@
+CFG = Release
+include Makefile.rules
