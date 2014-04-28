@@ -82,6 +82,8 @@ int32_t PTP_isPacketValid(const uint8_t *packet, const uint32_t len, const struc
     if(len < sizeof(struct PTP_header))
         return -2;
 
+    printf("ts_mt=%02X v=%02X\n", ptpPacket->transportSpecific_messageType, ptpPacket->reserved_versionPTP);
+
     reqLen = PTP_getRequiredLength(PTP_GET_MESSAGETYPE(ptpPacket->transportSpecific_messageType));
     if(len < reqLen)
         return -2;
