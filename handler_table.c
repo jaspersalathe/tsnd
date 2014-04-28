@@ -53,11 +53,14 @@ int32_t HandlerTable_matchPacketFilter(const struct HandlerTable_filterEntry *fi
             if(!matches)
                 break;
         }
-        if(matches)
-            return 1;
+        if(!matches)
+            return 0;
     }
 
-    return 0;
+    if(matches)
+        return 1;
+    else
+        return 0;
 }
 
 /*
