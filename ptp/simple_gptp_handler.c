@@ -24,7 +24,7 @@ static struct HandlerTable_filterEntry gptpFilter[] =
 };
 
 static void packetHandler(const struct Packet_packet *packet, void *context);
-static void handlePDelayReq(const struct PTP_pDelayReq *packet, struct SimpleGPTPHandler_state *state);
+static void handlePDelayReq(const struct Packet_packet *pIn, const struct PTP_pDelayReq *packet, struct SimpleGPTPHandler_state *state);
 
 
 /*
@@ -151,7 +151,7 @@ static void packetHandler(const struct Packet_packet *packet, void *context)
     switch(PTP_GET_MESSAGETYPE(ptpPacket->transportSpecific_messageType))
     {
     case PTP_MESSAGE_TYPE_PDELAY_REQ:
-        handlePDelayReq((struct PTP_pDelayReq*)ptpPacket, state);
+        handlePDelayReq(packet, (struct PTP_pDelayReq*)ptpPacket, state);
         break;
     case PTP_MESSAGE_TYPE_SYNC:
     case PTP_MESSAGE_TYPE_DELAY_REQ:
@@ -167,7 +167,29 @@ static void packetHandler(const struct Packet_packet *packet, void *context)
     }
 }
 
-static void handlePDelayReq(const struct PTP_pDelayReq *packet, struct SimpleGPTPHandler_state *state)
+static void handlePDelayReq(const struct Packet_packet *pIn, const struct PTP_pDelayReq *packet, struct SimpleGPTPHandler_state *state)
 {
+    struct Packet_packet pOut;
+    struct Port *p = &(state->ports[pIn->port]);
     puts("got PDelayReq");
+
+    pOut.len = 2000;
+    pOut.packet = malloc(pOut.len);
+    if(pOut.packet == NULL)
+        return;
+    pOut.port = pIn->port;
+
+    if(PTP_initMsg(pIn->packet, pIn->len, pOut.packet, &(pOut.len), state->conf, PTP_MESSAGE_TYPE_PDELAY_RESP, p) != 0)
+        goto end;
+    if(Port_send(p, &pOut) != 0)
+        goto end;
+
+    pOut.len = 2000;
+    if(PTP_initMsg(pIn->packet, pIn->len, pOut.packet, &(pOut.len), state->conf, PTP_MESSAGE_TYPE_PDELAY_RESP_FOLLOW_UP, p) != 0)
+        goto end;
+    if(Port_send(p, &pOut) != 0)
+        goto end;
+
+end:
+    free(pOut.packet);
 }
