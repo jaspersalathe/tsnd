@@ -128,8 +128,6 @@ static void packetHandler(const struct Packet_packet *packet, void *context)
     const struct PTP_header *ptpPacket;
     uint32_t ethHdrLen, len;
 
-    puts("recd msg");
-
     if(packet == NULL || context == NULL || packet->packet == NULL)
         return;
 
@@ -141,14 +139,8 @@ static void packetHandler(const struct Packet_packet *packet, void *context)
 
     ptpPacket = (struct PTP_header*)(packet->packet + ethHdrLen);
 
-    puts("got ptp =)");
-
     if(PTP_isPacketValid((uint8_t*)ptpPacket, len, state->conf) != 0)
         return;
-
-    puts("ptp message okay");
-
-    printf("mt: %d\n", PTP_GET_MESSAGETYPE(ptpPacket->transportSpecific_messageType));
 
     switch(PTP_GET_MESSAGETYPE(ptpPacket->transportSpecific_messageType))
     {
@@ -185,12 +177,14 @@ static void handlePDelayReq(const struct Packet_packet *pIn, const struct PTP_pD
         goto end;
     if(Port_send(p, &pOut) != 0)
         goto end;
+    puts("sent pdelay_resp");
 
     pOut.len = 2000;
     if(PTP_initMsg(pIn->packet, pIn->len, pOut.packet, &(pOut.len), state->conf, PTP_MESSAGE_TYPE_PDELAY_RESP_FOLLOW_UP, p) != 0)
         goto end;
     if(Port_send(p, &pOut) != 0)
         goto end;
+    puts("sent pdelay_resp_follow_up");
 
 end:
     free(pOut.packet);

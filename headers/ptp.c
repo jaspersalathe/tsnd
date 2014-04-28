@@ -9,7 +9,6 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 
 const uint8_t PTP_ETH_TYPE[ETHERNET_TYPE_LEN] = {0x88, 0xF7};
 
@@ -83,10 +82,7 @@ int32_t PTP_isPacketValid(const uint8_t *packet, const uint32_t len, const struc
     if(len < sizeof(struct PTP_header))
         return -2;
 
-    printf("ts_mt=%02X v=%02X\n", ptpPacket->transportSpecific_messageType, ptpPacket->reserved_versionPTP);
-
     reqLen = PTP_getRequiredLength(PTP_GET_MESSAGETYPE(ptpPacket->transportSpecific_messageType));
-    printf("%d < %d ?\n", len, reqLen);
     if(len < reqLen)
         return -2;
 
