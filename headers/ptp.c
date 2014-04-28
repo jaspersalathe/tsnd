@@ -153,7 +153,7 @@ int32_t PTP_initMsg(const uint8_t *inPacket, const uint32_t inLen, uint8_t *outP
     outPHdr->reserved_versionPTP = PTP_SET_VERSIONPTP(versionPTP);
     outPHdr->messageLen = 0; // this is calculated in specific message initializer
     outPHdr->domainNumber = conf->defaultDS.domainNumber;
-    outPHdr->flags = PTP_generateFlags(conf, msgType);
+    outPHdr->flags = PTPConfig_generateFlags(conf, msgType);
     memset(outPHdr->correction, 0, 8);
     memcpy(outPHdr->sourcePortId.clockId, conf->defaultDS.clockId, PTP_CLOCKID_LEN);
     outPHdr->sourcePortId.portNo = Common_lToNu16(port->portIdx);
@@ -255,54 +255,4 @@ int32_t PTP_init_PDelay_Resp_FollowUp(const uint8_t *inPacket, const uint32_t in
     memcpy(&(outPacket->requestingPortId), &(inReq->hdr.sourcePortId), sizeof(struct PTP_portId));
 
     return 0;
-}
-
-uint16_t PTP_generateFlags(const struct PTPConfig *conf, const uint8_t msgType)
-{
-    uint16_t resu = 0;
-
-    if(conf == NULL)
-        return 0xFFFF;
-
-    if(0 /* TODO: check, if I am MASTER */
-       && ( msgType == PTP_MESSAGE_TYPE_ANNOUNCE
-         || msgType == PTP_MESSAGE_TYPE_SYNC
-         || msgType == PTP_MESSAGE_TYPE_FOLLOW_UP
-         || msgType == PTP_MESSAGE_TYPE_DELAY_RESP ))
-        resu &= PTP_FLAG_ALTERNATE_MASTER;
-
-    if(conf->defaultDS.twoStepFlag
-       && ( msgType == PTP_MESSAGE_TYPE_SYNC
-         || msgType == PTP_MESSAGE_TYPE_PDELAY_RESP ))
-        resu &= PTP_FLAG_TWO_STEP;
-
-    // unicast flag is currently not supported
-
-    // profile specific 1 and 2 currently not set
-
-    if(conf->timePropertiesDS.leap61
-       && msgType == PTP_MESSAGE_TYPE_ANNOUNCE)
-        resu &= PTP_FLAG_LEAP61;
-
-    if(conf->timePropertiesDS.leap59
-       && msgType == PTP_MESSAGE_TYPE_ANNOUNCE)
-        resu &= PTP_FLAG_LEAP59;
-
-    if(conf->timePropertiesDS.currentUtcOffsetValid
-       && msgType == PTP_MESSAGE_TYPE_ANNOUNCE)
-        resu &= PTP_FLAG_CURR_UTC_OFFSET;
-
-    if(conf->timePropertiesDS.ptpTimescale
-       && msgType == PTP_MESSAGE_TYPE_ANNOUNCE)
-        resu &= PTP_FLAG_PTP_TIMESCALE;
-
-    if(conf->timePropertiesDS.timeTracable
-       && msgType == PTP_MESSAGE_TYPE_ANNOUNCE)
-        resu &= PTP_FLAG_TIME_TRACABLE;
-
-    if(conf->timePropertiesDS.frequencyTracable
-       && msgType == PTP_MESSAGE_TYPE_ANNOUNCE)
-        resu &= PTP_FLAG_FREQ_TRACABLE;
-
-    return resu;
 }

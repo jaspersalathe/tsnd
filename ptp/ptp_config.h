@@ -10,8 +10,6 @@
 
 #include <inttypes.h>
 
-//#include "headers/ptp.h"
-
 
 #define PTP_CURRUTCOFFSET 35 // as on 28. Apr 2014
 #define PTP_CLOCKID_LEN 8
@@ -89,5 +87,6 @@ uint8_t PTPConfig_getTransportSpecific(const struct PTPConfig *conf);
 uint8_t PTPConfig_getVersionPTP(const struct PTPConfig *conf);
 void PTPConfig_getDstMAC(const uint8_t messageType, const struct PTPConfig *conf, uint8_t *dstMAC);
 uint8_t PTPConfig_getLogMessageInterval(const uint8_t messageType, const struct PTPConfig *conf);
+uint16_t PTPConfig_generateFlags(const struct PTPConfig *conf, const uint8_t msgType);
 
 #endif /* PTP_CONFIG_H_ */

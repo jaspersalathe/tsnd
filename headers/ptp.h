@@ -198,6 +198,5 @@ int32_t PTP_isPacketValid(const uint8_t *packet, const uint32_t len, const struc
  */
 int32_t PTP_initMsg(const uint8_t *inPacket, const uint32_t inLen, uint8_t *outPacket, uint32_t *outLen, const struct PTPConfig *conf, const uint8_t msgType, const struct Port *port);
 
-uint16_t PTP_generateFlags(const struct PTPConfig *conf, const uint8_t msgType);
 
 #endif /* PTP_H_ */

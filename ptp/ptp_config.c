@@ -61,3 +61,53 @@ uint8_t PTPConfig_getLogMessageInterval(const uint8_t messageType, const struct 
         return 0x7F;
     }
 }
+
+uint16_t PTPConfig_generateFlags(const struct PTPConfig *conf, const uint8_t msgType)
+{
+    uint16_t resu = 0;
+
+    if(conf == NULL)
+        return 0xFFFF;
+
+    if(0 /* TODO: check, if I am MASTER */
+       && ( msgType == PTP_MESSAGE_TYPE_ANNOUNCE
+         || msgType == PTP_MESSAGE_TYPE_SYNC
+         || msgType == PTP_MESSAGE_TYPE_FOLLOW_UP
+         || msgType == PTP_MESSAGE_TYPE_DELAY_RESP ))
+        resu &= PTP_FLAG_ALTERNATE_MASTER;
+
+    if(conf->defaultDS.twoStepFlag
+       && ( msgType == PTP_MESSAGE_TYPE_SYNC
+         || msgType == PTP_MESSAGE_TYPE_PDELAY_RESP ))
+        resu &= PTP_FLAG_TWO_STEP;
+
+    // unicast flag is currently not supported
+
+    // profile specific 1 and 2 currently not set
+
+    if(conf->timePropertiesDS.leap61
+       && msgType == PTP_MESSAGE_TYPE_ANNOUNCE)
+        resu &= PTP_FLAG_LEAP61;
+
+    if(conf->timePropertiesDS.leap59
+       && msgType == PTP_MESSAGE_TYPE_ANNOUNCE)
+        resu &= PTP_FLAG_LEAP59;
+
+    if(conf->timePropertiesDS.currentUtcOffsetValid
+       && msgType == PTP_MESSAGE_TYPE_ANNOUNCE)
+        resu &= PTP_FLAG_CURR_UTC_OFFSET;
+
+    if(conf->timePropertiesDS.ptpTimescale
+       && msgType == PTP_MESSAGE_TYPE_ANNOUNCE)
+        resu &= PTP_FLAG_PTP_TIMESCALE;
+
+    if(conf->timePropertiesDS.timeTracable
+       && msgType == PTP_MESSAGE_TYPE_ANNOUNCE)
+        resu &= PTP_FLAG_TIME_TRACABLE;
+
+    if(conf->timePropertiesDS.frequencyTracable
+       && msgType == PTP_MESSAGE_TYPE_ANNOUNCE)
+        resu &= PTP_FLAG_FREQ_TRACABLE;
+
+    return resu;
+}
