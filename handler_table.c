@@ -27,7 +27,7 @@ int HandlerTable_isPacketFieldValid(const enum HandlerTable_packetField value)
 int32_t HandlerTable_matchPacketFilter(const struct HandlerTable_filterEntry *filters, const struct Packet_packet *packet)
 {
     uint32_t i, j, fieldOffset;
-    int matches;
+    int matches = 0;
 
     if(filters == NULL || packet == NULL || packet->packet == NULL)
         return -1;
