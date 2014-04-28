@@ -55,6 +55,7 @@ int32_t HandlerTable_matchPacketFilter(const struct HandlerTable_filterEntry *fi
         }
         if(!matches)
             return 0;
+        i++;
     }
 
     if(matches)
