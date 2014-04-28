@@ -59,7 +59,7 @@ int32_t SimpleGPTPHandler_init(struct HandlerTable_table *table, struct Port *po
     state->portCnt = portCnt;
 
     state->conf->isAVB = 1;
-    state->conf->versionPTP = PTP_VERSIONPTP_0;
+    state->conf->versionPTP = PTP_VERSIONPTP;
     // initialize static members defaultDS
     state->conf->defaultDS.twoStepFlag = 1;
     //    state->conf->defaultDS.clockId TODO
