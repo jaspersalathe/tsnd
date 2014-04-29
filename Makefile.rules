@@ -13,7 +13,7 @@ MKDIR = mkdir
 RM = rm
 CP = cp
 
-LIBS = pcap sndfile
+LIBS = pcap sndfile rt
 
 CFLAGS += -Wall -std=gnu99
 
@@ -24,6 +24,8 @@ CAPPSRC += ./ptp
 INC = ./
 
 DEPFLAGS = 
+
+DEFINES = _GNU_SOURCE
 
 TARGET = $(BUILDPATH)/tsnd
 
