@@ -7,6 +7,8 @@
 
 #include "common.h"
 
+#include <endian.h>
+
 
 /*
  * network format is always LITTLE ENDIAN
