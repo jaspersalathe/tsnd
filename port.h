@@ -29,9 +29,18 @@ struct Port
  *            -2: could not open raw socket
  *            -3: could not find interface
  *            -4: could not bind interface
- *            -5: could not set promiscious mode
+ *            -5: could not set promiscuous mode
  */
 int32_t Port_open(const char *devName, struct Port *port);
+
+/*
+ * Return values:
+ *             0: success
+ *            -1: pointer NULL
+ *            -2: could not register/unregister group
+ */
+int32_t Port_addMcastGrp(struct Port *port, const uint8_t *mcastAddr, const uint32_t len);
+int32_t Port_remMcastGrp(struct Port *port, const uint8_t *mcastAddr, const uint32_t len);
 
 /*
  * Return values:

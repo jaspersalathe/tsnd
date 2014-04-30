@@ -8,14 +8,19 @@
 #include "port.h"
 
 #include <string.h>
+#include <time.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <netpacket/packet.h>
 #include <net/ethernet.h>
 #include <net/if.h>
 #include <arpa/inet.h>
-#include <time.h>
 
+
+#define MIN(x, y)                   \
+        ({ __typeof__ (x) _x = (x); \
+           __typeof__ (y) _y = (y); \
+           _x < _y ? _x : _y;       })
 
 static int32_t getInterfaceIndex(struct Port *p)
 {
@@ -61,7 +66,7 @@ static void getTime(struct timespec *t)
  *            -2: could not open raw socket
  *            -3: could not find interface
  *            -4: could not bind interface
- *            -5: could not set promiscious mode
+ *            -5: could not set promiscuous mode
  */
 int32_t Port_open(const char *devName, struct Port *port)
 {
@@ -99,6 +104,51 @@ int32_t Port_open(const char *devName, struct Port *port)
     if(setsockopt(port->rawFd, SOL_PACKET, PACKET_ADD_MEMBERSHIP, &pReq, sizeof(pReq)))
         return -5;
 
+    return 0;
+}
+
+/*
+ * Return values:
+ *             0: success
+ *            -1: pointer NULL
+ *            -2: could not register/unregister group
+ */
+int32_t Port_addMcastGrp(struct Port *port, const uint8_t *mcastAddr, const uint32_t len)
+{
+    struct packet_mreq pReq;
+    if(port == NULL || mcastAddr == NULL)
+        return -1;
+
+    pReq.mr_ifindex = port->ifIdx;
+    pReq.mr_type = PACKET_MR_MULTICAST;
+    pReq.mr_alen = MIN(len, sizeof(pReq.mr_address));
+    memcpy(pReq.mr_address, mcastAddr, pReq.mr_alen);
+
+    if(setsockopt(port->rawFd, SOL_PACKET, PACKET_ADD_MEMBERSHIP, &pReq, sizeof(pReq)))
+        return -2;
+    return 0;
+}
+
+/*
+ * Return values:
+ *             0: success
+ *            -1: pointer NULL
+ *            -2: could not register/unregister group
+ */
+
+int32_t Port_remMcastGrp(struct Port *port, const uint8_t *mcastAddr, const uint32_t len)
+{
+    struct packet_mreq pReq;
+    if(port == NULL || mcastAddr == NULL)
+        return -1;
+
+    pReq.mr_ifindex = port->ifIdx;
+    pReq.mr_type = PACKET_MR_MULTICAST;
+    pReq.mr_alen = MIN(len, sizeof(pReq.mr_address));
+    memcpy(pReq.mr_address, mcastAddr, pReq.mr_alen);
+
+    if(setsockopt(port->rawFd, SOL_PACKET, PACKET_DROP_MEMBERSHIP, &pReq, sizeof(pReq)))
+        return -2;
     return 0;
 }
 

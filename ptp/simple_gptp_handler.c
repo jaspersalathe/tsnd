@@ -101,6 +101,15 @@ int32_t SimpleGPTPHandler_init(struct HandlerTable_table *table, struct Port *po
 
     // TODO: setup state
 
+    // setup ports
+    for(int i = 0; i < portCnt; i++)
+    {
+        if(Port_addMcastGrp(&(ports[i]), PTP_ETH_MAC_GENERAL, ETHERNET_MAC_LEN) != 0)
+            goto fail;
+        if(Port_addMcastGrp(&(ports[i]), PTP_ETH_MAC_P2P, ETHERNET_MAC_LEN) != 0)
+            goto fail;
+    }
+
     // okay, register handler
     entry->context = state;
     entry->filters = gptpFilter;

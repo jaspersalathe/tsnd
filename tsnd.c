@@ -154,7 +154,14 @@ int main(int argc, char **argv)
                 resu = Port_recv(&(ports[i]), &p);
                 if(resu == 0)
                 {
-                    fprintf(stdout, "got one on %s (l=%d)\n", ports[i].devName, p.len);
+                    memset(str, 0, sizeof(str));
+                    for(int j = 0; j < p.len; j++)
+                    {
+                        char cur[8];
+                        snprintf(cur, sizeof(cur), "%02X ", p.packet[j]);
+                        strcat(str, cur);
+                    }
+                    fprintf(stdout, "got one on %s (l=%d, p='%s')\n", ports[i].devName, p.len, str);
                     HandlerTable_handlePacket(&handlerTable, &p);
                 }
                 else
