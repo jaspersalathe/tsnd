@@ -274,3 +274,16 @@ void PTP_convertTimestampLtoPTP(const struct Packet_timestamp *l, struct PTP_tim
     ptp->sec_lsb = Common_lToNu32(l->t.tv_sec);
     ptp->nsec = Common_lToNu64(l->t.tv_nsec);
 }
+
+double PTP_diffTimestamp(const struct Packet_timestamp *start, const struct Packet_timestamp *end)
+{
+    double resu;
+
+    if(start == NULL || end == NULL)
+        return 0;
+
+    resu = end->t.tv_nsec + end->t.tv_sec * 1000000000.0;
+    resu -= start->t.tv_nsec + start->t.tv_sec * 1000000000.0;
+
+    return resu;
+}

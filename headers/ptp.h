@@ -213,4 +213,6 @@ int32_t PTP_initMsg(const struct Packet_packet *inPacket, uint8_t *outPacket, ui
 void PTP_convertTimestampPTPtoL(const struct PTP_timestamp *ptp, struct Packet_timestamp *l);
 void PTP_convertTimestampLtoPTP(const struct Packet_timestamp *l, struct PTP_timestamp *ptp);
 
+double PTP_diffTimestamp(const struct Packet_timestamp *start, const struct Packet_timestamp *end);
+
 #endif /* PTP_H_ */

@@ -8,9 +8,9 @@
 #include "simple_gptp_handler.h"
 
 #include <stdlib.h>
-//#include <malloc.h>
 #include <string.h>
 #include <stdio.h>
+#include <time.h>
 
 #include "headers/ethernet.h"
 #include "headers/ptp.h"
@@ -184,15 +184,17 @@ static void handlePDelayReq(const struct Packet_packet *pIn, const struct PTP_pD
     pOut.port = pIn->port;
     ts = pIn->t;
 
-    if(PTP_initMsg(pIn, pOut.packet, &(pOut.len), state->conf, PTP_MESSAGE_TYPE_PDELAY_RESP, p, &(ts)) != 0)
+    if(PTP_initMsg(pIn, pOut.packet, &(pOut.len), state->conf, PTP_MESSAGE_TYPE_PDELAY_RESP, p, &ts) != 0)
         goto end;
     if(Port_send(p, &pOut) != 0)
         goto end;
     puts("sent pdelay_resp");
 
+    fprintf(stdout, "processing time: %lf\n", PTP_diffTimestamp(&(pOut.t), &ts));
+
     pOut.len = 2000;
     ts = pOut.t;
-    if(PTP_initMsg(pIn, pOut.packet, &(pOut.len), state->conf, PTP_MESSAGE_TYPE_PDELAY_RESP_FOLLOW_UP, p, &(ts)) != 0)
+    if(PTP_initMsg(pIn, pOut.packet, &(pOut.len), state->conf, PTP_MESSAGE_TYPE_PDELAY_RESP_FOLLOW_UP, p, &ts) != 0)
         goto end;
     if(Port_send(p, &pOut) != 0)
         goto end;
