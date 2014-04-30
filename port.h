@@ -29,6 +29,7 @@ struct Port
  *            -2: could not open raw socket
  *            -3: could not find interface
  *            -4: could not bind interface
+ *            -5: could not set promiscious mode
  */
 int32_t Port_open(const char *devName, struct Port *port);
 

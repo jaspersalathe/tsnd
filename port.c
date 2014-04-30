@@ -61,10 +61,12 @@ static void getTime(struct timespec *t)
  *            -2: could not open raw socket
  *            -3: could not find interface
  *            -4: could not bind interface
+ *            -5: could not set promiscious mode
  */
 int32_t Port_open(const char *devName, struct Port *port)
 {
     struct sockaddr_ll sockaddr;
+    struct packet_mreq pReq;
 
     if(devName == NULL || port == NULL)
         return -1;
@@ -90,6 +92,12 @@ int32_t Port_open(const char *devName, struct Port *port)
 
     if(setsockopt(port->rawFd, SOL_SOCKET, SO_BINDTODEVICE, port->devName, strlen(port->devName)))
         return -4;
+
+    pReq.mr_ifindex = port->rawFd;
+    pReq.mr_type = PACKET_MR_PROMISC;
+    pReq.mr_alen = 0;
+    if(setsockopt(port->rawFd, SOL_PACKET, PACKET_ADD_MEMBERSHIP, &pReq, sizeof(pReq)))
+        return -5;
 
     return 0;
 }
