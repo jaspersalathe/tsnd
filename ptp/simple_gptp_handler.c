@@ -209,6 +209,8 @@ static void handlePDelayReq(const struct Packet_packet *pIn, const struct PTP_pD
     if(Port_send(p, &pOut) != 0)
         goto end;
 
+    err = 0;
+
 end:
     free(pOut.packet);
     if(err == 1)
