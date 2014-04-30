@@ -14,8 +14,6 @@
 #include <inttypes.h>
 #include <poll.h>
 
-#include <pcap/pcap.h>
-
 
 #include "handler_table.h"
 #include "ptp/simple_gptp_handler.h"
@@ -38,32 +36,10 @@ void help(void)
     exit(1);
 }
 
-/*
-void pcap_callback(u_char* args, const struct pcap_pkthdr* packet_header, const u_char* packet)
-{
-    struct Packet_packet p;
-    p.port = 1;
-    p.len = packet_header->len;
-    p.packet = malloc(p.len);
-    if(p.packet == NULL)
-        return;
-    memcpy(p.packet, packet, p.len);
-    p.t.t.tv_sec = packet_header->ts.tv_sec;
-    p.t.t.tv_nsec = packet_header->ts.tv_usec * 1000;
-    HandlerTable_handlePacket(&handlerTable, &p);
-    free(p.packet);
-}
-*/
-
 int main(int argc, char **argv)
 {
-    pcap_t* handle = NULL;
-    struct bpf_program comp_filter_exp;
-    
     char **devList = NULL;
     int devListSize = 0, devListCnt = 0;
-	char errbuf[PCAP_ERRBUF_SIZE];
-    char *filter_exp = "";
     int32_t resu;
 
     int cnt;
@@ -171,30 +147,7 @@ int main(int argc, char **argv)
                 fprintf(stderr, "device %s has error\n", ports[i].devName);
         }
     }
-    /*
-    handle = pcap_open_live(dev, BUFSIZ, 1, -1, errbuf);
-	if (NULL == handle) 
-	{
-		fprintf(stderr, "Could not open device %s: %s\n", dev, errbuf);
-		return -1;
-	}
 
-	if (-1 == pcap_compile(handle, &comp_filter_exp, filter_exp, 0, PCAP_NETMASK_UNKNOWN))
-	{
-		fprintf(stderr, "Could not parse filter %s: %s\n", filter_exp, pcap_geterr(handle));
-		return -1;
-	}
-
-	if (-1 == pcap_setfilter(handle, &comp_filter_exp)) 
-	{
-		fprintf(stderr, "Could not install filter %s: %s\n", filter_exp, pcap_geterr(handle));
-		return -1;
-	}
-
-	puts("startup successful");
-
-	pcap_loop(handle, -1, pcap_callback, NULL);
-    */
 	puts("ending...");
 
     return 0;

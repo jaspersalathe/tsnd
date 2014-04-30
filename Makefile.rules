@@ -13,7 +13,7 @@ MKDIR = mkdir
 RM = rm
 CP = cp
 
-LIBS = pcap sndfile rt
+LIBS = rt
 
 CFLAGS += -Wall -std=gnu99
 
