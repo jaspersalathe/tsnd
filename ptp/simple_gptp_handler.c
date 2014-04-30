@@ -9,7 +9,6 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 #include <time.h>
 
 #include "headers/ethernet.h"
@@ -186,7 +185,6 @@ static void handlePDelayReq(const struct Packet_packet *pIn, const struct PTP_pD
     struct Packet_packet pOut;
     struct Packet_timestamp ts;
     struct Port *p = &(state->ports[pIn->port]);
-    puts("got PDelayReq");
 
     pOut.len = 2000;
     pOut.packet = malloc(pOut.len);
@@ -199,9 +197,6 @@ static void handlePDelayReq(const struct Packet_packet *pIn, const struct PTP_pD
         goto end;
     if(Port_send(p, &pOut) != 0)
         goto end;
-    puts("sent pdelay_resp");
-
-    fprintf(stdout, "processing time: %lf\n", PTP_diffTimestamp(&ts, &(pOut.t)));
 
     pOut.len = 2000;
     ts = pOut.t;
@@ -209,7 +204,6 @@ static void handlePDelayReq(const struct Packet_packet *pIn, const struct PTP_pD
         goto end;
     if(Port_send(p, &pOut) != 0)
         goto end;
-    puts("sent pdelay_resp_follow_up");
 
 end:
     free(pOut.packet);

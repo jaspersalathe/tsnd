@@ -137,7 +137,7 @@ int main(int argc, char **argv)
                         snprintf(cur, sizeof(cur), "%02X ", p.packet[j]);
                         strcat(str, cur);
                     }
-                    fprintf(stdout, "got one on %s (l=%d, p='%s')\n", ports[i].devName, p.len, str);
+//                    fprintf(stdout, "got one on %s (l=%d, p='%s')\n", ports[i].devName, p.len, str);
                     HandlerTable_handlePacket(&handlerTable, &p);
                 }
                 else

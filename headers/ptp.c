@@ -156,7 +156,7 @@ int32_t PTP_initMsg(const struct Packet_packet *inPacket, uint8_t *outPacket, ui
     outPHdr->flags = PTPConfig_generateFlags(conf, msgType);
     memset(&(outPHdr->correction), 0, 8);
     memcpy(outPHdr->sourcePortId.clockId, conf->defaultDS.clockId, PTP_CLOCKID_LEN);
-    outPHdr->sourcePortId.portNo = Common_lToNu16(port->portIdx);
+    outPHdr->sourcePortId.portNo = Common_lToNu16(port->portIdx+1);
     outPHdr->sequId = 0; // this is set by specific message initializer
     outPHdr->controlField = PTP_getControlField(msgType);
     outPHdr->logMessageInterval = PTPConfig_getLogMessageInterval(msgType, conf);
@@ -198,7 +198,7 @@ int32_t PTP_init_PDelay_Req(struct PTP_pDelayReq *outPacket, const struct PTPCon
 
     // set remaining stuff in general header
     outPacket->hdr.sequId = 0; // TODO: add counter for sequId
-    outPacket->hdr.messageLen = Common_lToNu16(50);
+    outPacket->hdr.messageLen = Common_lToNu16(54);
 
     // set message content
     memset(&(outPacket->originTimestamp), 0, 10);
@@ -217,13 +217,13 @@ int32_t PTP_init_PDelay_Resp(const struct Packet_packet *inPacket, struct PTP_pD
     inEthLen = Ethernet_getHeaderLength(inPacket->packet, inPacket->len);
     if(inPacket->len < inReqLen + inEthLen)
         return -1;
-    inReq = (struct PTP_pDelayReq*)(inPacket + inEthLen);
+    inReq = (struct PTP_pDelayReq*)(inPacket->packet + inEthLen);
 
     // assume this is enough checking
 
     // set remaining stuff in general header
     outPacket->hdr.sequId = inReq->hdr.sequId;
-    outPacket->hdr.messageLen = Common_lToNu16(50);
+    outPacket->hdr.messageLen = Common_lToNu16(54);
 
     // set message content
     PTP_convertTimestampLtoPTP(ts, &(outPacket->receiveTimestamp));
@@ -242,13 +242,13 @@ int32_t PTP_init_PDelay_Resp_FollowUp(const struct Packet_packet *inPacket, stru
     inEthLen = Ethernet_getHeaderLength(inPacket->packet, inPacket->len);
     if(inPacket->len < inReqLen + inEthLen)
         return -1;
-    inReq = (struct PTP_pDelayReq*)(inPacket + inEthLen);
+    inReq = (struct PTP_pDelayReq*)(inPacket->packet + inEthLen);
 
     // assume this is enough checking
 
     // set remaining stuff in general header
     outPacket->hdr.sequId = inReq->hdr.sequId;
-    outPacket->hdr.messageLen = Common_lToNu16(50);
+    outPacket->hdr.messageLen = Common_lToNu16(54);
 
     // set message content
     PTP_convertTimestampLtoPTP(ts, &(outPacket->receiveTimestamp));
@@ -272,7 +272,7 @@ void PTP_convertTimestampLtoPTP(const struct Packet_timestamp *l, struct PTP_tim
 
     ptp->sec_msb = 0;
     ptp->sec_lsb = Common_lToNu32(l->t.tv_sec);
-    ptp->nsec = Common_lToNu64(l->t.tv_nsec);
+    ptp->nsec = Common_lToNu32(l->t.tv_nsec);
 }
 
 double PTP_diffTimestamp(const struct Packet_timestamp *start, const struct Packet_timestamp *end)
