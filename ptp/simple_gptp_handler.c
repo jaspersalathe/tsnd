@@ -62,13 +62,24 @@ int32_t SimpleGPTPHandler_init(struct HandlerTable_table *table, struct Port *po
     state->conf->versionPTP = PTP_VERSIONPTP;
     // initialize static members defaultDS
     state->conf->defaultDS.twoStepFlag = 1;
-    //    state->conf->defaultDS.clockId TODO
+    if(portCnt >= 1)
+    {
+        // take mac of first port for clockid
+        state->conf->defaultDS.clockId[0] = ports[0].macAddr[0];
+        state->conf->defaultDS.clockId[1] = ports[0].macAddr[1];
+        state->conf->defaultDS.clockId[2] = ports[0].macAddr[2];
+        state->conf->defaultDS.clockId[3] = 0xFF;
+        state->conf->defaultDS.clockId[4] = 0xFF;
+        state->conf->defaultDS.clockId[5] = ports[0].macAddr[3];
+        state->conf->defaultDS.clockId[6] = ports[0].macAddr[4];
+        state->conf->defaultDS.clockId[7] = ports[0].macAddr[5];
+    }
     state->conf->defaultDS.numberPorts = portCnt;
 
     // initialize dynamic members defaultDS
     state->conf->defaultDS.clockQuality.clockClass = 255; // slave only
     state->conf->defaultDS.clockQuality.clockAccuracy = 0xFE; // unknown
-    state->conf->defaultDS.clockQuality.offsetScaledLogVariance = 0xFFFF; // max value, (for the monent TODO)
+    state->conf->defaultDS.clockQuality.offsetScaledLogVariance = 0xFFFF; // max value, (for the moment TODO)
     state->conf->defaultDS.priority1 = 255; // we do not want to be grandmaster
     state->conf->defaultDS.priority2 = 255; // so get the worst priority
     state->conf->defaultDS.domainNumber = 0; // default domain
