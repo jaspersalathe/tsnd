@@ -97,6 +97,7 @@ int main(int argc, char **argv)
     }
     for(int i = 0; i < devListCnt; i++)
     {
+        ports[i].portIdx = i;
         resu = Port_open(devList[i], &(ports[i]));
         if(resu != 0)
         {
