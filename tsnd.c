@@ -105,7 +105,9 @@ int main(int argc, char **argv)
         }
         pollFds[i].fd = ports[i].rawFd;
         pollFds[i].events = POLLIN | POLLPRI;
-        fprintf(stdout, "opened device %s (%d)\n", devList[i], ports[i].ifIdx);
+        fprintf(stdout, "opened device %s (idx=%d, mac=%02X:%02X:%02X:%02X:%02X:%02X)\n",
+                devList[i], ports[i].ifIdx, ports[i].macAddr[0], ports[i].macAddr[1], ports[i].macAddr[2],
+                ports[i].macAddr[3], ports[i].macAddr[4], ports[i].macAddr[5]);
     }
 
     if(SimpleGPTPHandler_init(&handlerTable, ports, portCnt) != 0)
@@ -122,6 +124,7 @@ int main(int argc, char **argv)
         if(cnt < 0)
         {
             fprintf(stderr, "error while polling\n");
+            return -1;
         }
         for(int i = 0; i < portCnt; i++)
         {
@@ -131,13 +134,13 @@ int main(int argc, char **argv)
                 resu = Port_recv(&(ports[i]), &p);
                 if(resu == 0)
                 {
-                    memset(str, 0, sizeof(str));
-                    for(int j = 0; j < p.len; j++)
-                    {
-                        char cur[8];
-                        snprintf(cur, sizeof(cur), "%02X ", p.packet[j]);
-                        strcat(str, cur);
-                    }
+//                    memset(str, 0, sizeof(str));
+//                    for(int j = 0; j < p.len; j++)
+//                    {
+//                        char cur[8];
+//                        snprintf(cur, sizeof(cur), "%02X ", p.packet[j]);
+//                        strcat(str, cur);
+//                    }
 //                    fprintf(stdout, "got one on %s (l=%d, p='%s')\n", ports[i].devName, p.len, str);
                     HandlerTable_handlePacket(&handlerTable, &p);
                 }
