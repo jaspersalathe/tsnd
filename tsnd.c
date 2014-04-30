@@ -108,7 +108,8 @@ int main(int argc, char **argv)
         fprintf(stdout, "opened device %s (%d)\n", devList[i], ports[i].ifIdx);
     }
 
-    SimpleGPTPHandler_init(&handlerTable, ports, portCnt);
+    if(SimpleGPTPHandler_init(&handlerTable, ports, portCnt) != 0)
+        return 1;
 
     puts("registered handler");
 

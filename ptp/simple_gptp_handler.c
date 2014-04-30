@@ -8,6 +8,7 @@
 #include "simple_gptp_handler.h"
 
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <time.h>
 
@@ -130,6 +131,7 @@ int32_t SimpleGPTPHandler_init(struct HandlerTable_table *table, struct Port *po
     return 0;
 
 fail:
+    fprintf(stderr, "could not init simple gptp handler\n");
     if(state != NULL)
     {
         if(state->conf != NULL)
