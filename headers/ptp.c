@@ -282,8 +282,8 @@ double PTP_diffTimestamp(const struct Packet_timestamp *start, const struct Pack
     if(start == NULL || end == NULL)
         return 0;
 
-    resu = end->t.tv_nsec + end->t.tv_sec * 1000000000.0;
-    resu -= start->t.tv_nsec + start->t.tv_sec * 1000000000.0;
+    resu = end->t.tv_nsec / 1000000000.0 + end->t.tv_sec;
+    resu -= start->t.tv_nsec / 1000000000.0 + start->t.tv_sec;
 
     return resu;
 }

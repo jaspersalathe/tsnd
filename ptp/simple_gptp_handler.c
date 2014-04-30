@@ -190,7 +190,7 @@ static void handlePDelayReq(const struct Packet_packet *pIn, const struct PTP_pD
         goto end;
     puts("sent pdelay_resp");
 
-    fprintf(stdout, "processing time: %lf\n", PTP_diffTimestamp(&(pOut.t), &ts));
+    fprintf(stdout, "processing time: %lf\n", PTP_diffTimestamp(&ts, &(pOut.t)));
 
     pOut.len = 2000;
     ts = pOut.t;
