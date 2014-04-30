@@ -56,7 +56,7 @@ static int32_t getInterfaceMac(struct Port *p)
 static void getTime(struct timespec *t)
 {
     memset(t, 0, sizeof(struct timespec));
-    clock_gettime(CLOCK_REALTIME, t);
+    clock_gettime(CLOCK_MONOTONIC, t);
 }
 
 /*
