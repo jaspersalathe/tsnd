@@ -187,6 +187,7 @@ static void handlePDelayReq(const struct Packet_packet *pIn, const struct PTP_pD
     struct Packet_packet pOut;
     struct Packet_timestamp ts;
     struct Port *p = &(state->ports[pIn->port]);
+    int err = 1;
 
     pOut.len = 2000;
     pOut.packet = malloc(pOut.len);
@@ -200,6 +201,7 @@ static void handlePDelayReq(const struct Packet_packet *pIn, const struct PTP_pD
     if(Port_send(p, &pOut) != 0)
         goto end;
 
+    err = 2;
     pOut.len = 2000;
     ts = pOut.t;
     if(PTP_initMsg(pIn, pOut.packet, &(pOut.len), state->conf, PTP_MESSAGE_TYPE_PDELAY_RESP_FOLLOW_UP, p, &ts) != 0)
@@ -209,4 +211,8 @@ static void handlePDelayReq(const struct Packet_packet *pIn, const struct PTP_pD
 
 end:
     free(pOut.packet);
+    if(err == 1)
+        fprintf(stderr, "could not send PDelayResp\n");
+    if(err == 2)
+        fprintf(stderr, "could not send PDelayRespFollowUp\n");
 }
