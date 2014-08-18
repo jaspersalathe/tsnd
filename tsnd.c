@@ -31,10 +31,27 @@ uint32_t portCnt;
 struct pollfd *pollFds;
 
 
-void help(void)
+void help(char *myname)
 {
+	fprintf(stdout, "Usage:\n%s [-b] -i <interface>\n", myname);
+	fputs("Options:\n", stdout);
+	fputs(" -i: interface to be used; multiple occurrence possible\n", stdout);
+	fputs(" -b: start in bridge mode (will run bridge)\n", stdout);
+	fputs(" -h: show this help\n", stdout);
     exit(1);
 }
+
+void init_endnode(struct HandlerTable_table *handlerTable, struct Port *ports, uint32_t portCnt)
+{
+    if(SimpleGPTPHandler_init(handlerTable, ports, portCnt) != 0)
+        exit(1);
+}
+
+void init_bridgenode(struct HandlerTable_table *handlerTable, struct Port *ports, uint32_t portCnt)
+{
+
+}
+
 
 int main(int argc, char **argv)
 {
@@ -45,13 +62,15 @@ int main(int argc, char **argv)
     int cnt;
     struct Packet_packet p;
 
+    int bridgemode = 0;
+
     int c;
-    while((c = getopt(argc, argv, "hi:")) > 0) 
+    while((c = getopt(argc, argv, "hib:")) > 0)
     {
         switch (c) 
         {
         case 'h': 
-            help();
+            help(argv[0]);
             break;
         case 'i':
             if(devListCnt >= devListSize)
@@ -66,8 +85,12 @@ int main(int argc, char **argv)
             }
             devList[devListCnt++] = strdup(optarg);
             break;
+        case 'b':
+        	bridgemode = 1;
+        	break;
         default:
             fprintf(stderr, "Unrecognized option!\n");
+            help(argv[0]);
             break;
         }
     }
@@ -111,8 +134,14 @@ int main(int argc, char **argv)
                 ports[i].macAddr[3], ports[i].macAddr[4], ports[i].macAddr[5]);
     }
 
-    if(SimpleGPTPHandler_init(&handlerTable, ports, portCnt) != 0)
-        return 1;
+    if(bridgemode)
+    {
+        init_bridgenode(&handlerTable, ports, portCnt);
+    }
+    else
+    {
+        init_endnode(&handlerTable, ports, portCnt);
+    }
 
     puts("registered handler");
 
