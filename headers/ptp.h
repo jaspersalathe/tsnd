@@ -210,9 +210,8 @@ int32_t PTP_isPacketValid(const uint8_t *packet, const uint32_t len, const struc
  */
 int32_t PTP_initMsg(const struct Packet_packet *inPacket, uint8_t *outPacket, uint32_t *outLen, const struct PTPConfig *conf, const uint8_t msgType, const struct Port *port, void *param);
 
-void PTP_convertTimestampPTPtoL(const struct PTP_timestamp *ptp, struct Packet_timestamp *l);
-void PTP_convertTimestampLtoPTP(const struct Packet_timestamp *l, struct PTP_timestamp *ptp);
 
-double PTP_diffTimestamp(const struct Packet_timestamp *start, const struct Packet_timestamp *end);
+void PTP_convertTimestampPTPtoL(const struct PTP_timestamp *ptp, struct Common_timestamp *l);
+void PTP_convertTimestampLtoPTP(const struct Common_timestamp *l, struct PTP_timestamp *ptp);
 
 #endif /* PTP_H_ */

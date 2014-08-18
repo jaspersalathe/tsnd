@@ -185,7 +185,7 @@ static void packetHandler(const struct Packet_packet *packet, void *context)
 static void handlePDelayReq(const struct Packet_packet *pIn, const struct PTP_pDelayReq *packet, struct SimpleGPTPHandler_state *state)
 {
     struct Packet_packet pOut;
-    struct Packet_timestamp ts;
+    struct Common_timestamp ts;
     struct Port *p = &(state->ports[pIn->port]);
     int err = 1;
 

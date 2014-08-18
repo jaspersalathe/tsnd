@@ -8,6 +8,7 @@
 #include "common.h"
 
 #include <endian.h>
+#include <stdlib.h>
 
 
 /*
@@ -150,4 +151,17 @@ int64_t Common_lToNi64(const int64_t data)
 #else
 #error unknown byteorder!
 #endif
+}
+
+double Common_diffTimestamp(const struct Common_timestamp *start, const struct Common_timestamp *end)
+{
+    double resu;
+
+    if(start == NULL || end == NULL)
+        return 0;
+
+    resu = end->t.tv_nsec / 1000000000.0 + end->t.tv_sec;
+    resu -= start->t.tv_nsec / 1000000000.0 + start->t.tv_sec;
+
+    return resu;
 }

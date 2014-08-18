@@ -17,8 +17,8 @@ const uint8_t PTP_ETH_MAC_P2P[ETHERNET_MAC_LEN] = {0x01, 0x80, 0xC2, 0x00, 0x00,
 
 
 int32_t PTP_init_PDelay_Req(struct PTP_pDelayReq *outPacket, const struct PTPConfig *conf, const struct Port *port);
-int32_t PTP_init_PDelay_Resp(const struct Packet_packet *inPacket, struct PTP_pDelayResp *outPacket, const struct PTPConfig *conf, const struct Port *port, const struct Packet_timestamp *ts);
-int32_t PTP_init_PDelay_Resp_FollowUp(const struct Packet_packet *inPacket, struct PTP_pDelayRespFollowUp *outPacket, const struct PTPConfig *conf, const struct Port *port, const struct Packet_timestamp *ts);
+int32_t PTP_init_PDelay_Resp(const struct Packet_packet *inPacket, struct PTP_pDelayResp *outPacket, const struct PTPConfig *conf, const struct Port *port, const struct Common_timestamp *ts);
+int32_t PTP_init_PDelay_Resp_FollowUp(const struct Packet_packet *inPacket, struct PTP_pDelayRespFollowUp *outPacket, const struct PTPConfig *conf, const struct Port *port, const struct Common_timestamp *ts);
 
 
 uint8_t PTP_getControlField(const uint8_t messageType)
@@ -207,7 +207,7 @@ int32_t PTP_init_PDelay_Req(struct PTP_pDelayReq *outPacket, const struct PTPCon
     return 0;
 }
 
-int32_t PTP_init_PDelay_Resp(const struct Packet_packet *inPacket, struct PTP_pDelayResp *outPacket, const struct PTPConfig *conf, const struct Port *port, const struct Packet_timestamp *ts)
+int32_t PTP_init_PDelay_Resp(const struct Packet_packet *inPacket, struct PTP_pDelayResp *outPacket, const struct PTPConfig *conf, const struct Port *port, const struct Common_timestamp *ts)
 {
     uint32_t inEthLen, inReqLen = PTP_getRequiredLength(PTP_MESSAGE_TYPE_PDELAY_REQ);
     const struct PTP_pDelayReq *inReq;
@@ -232,7 +232,7 @@ int32_t PTP_init_PDelay_Resp(const struct Packet_packet *inPacket, struct PTP_pD
     return 0;
 }
 
-int32_t PTP_init_PDelay_Resp_FollowUp(const struct Packet_packet *inPacket, struct PTP_pDelayRespFollowUp *outPacket, const struct PTPConfig *conf, const struct Port *port, const struct Packet_timestamp *ts)
+int32_t PTP_init_PDelay_Resp_FollowUp(const struct Packet_packet *inPacket, struct PTP_pDelayRespFollowUp *outPacket, const struct PTPConfig *conf, const struct Port *port, const struct Common_timestamp *ts)
 {
     uint32_t inEthLen, inReqLen = PTP_getRequiredLength(PTP_MESSAGE_TYPE_PDELAY_REQ);
     const struct PTP_pDelayReq *inReq;
@@ -256,7 +256,9 @@ int32_t PTP_init_PDelay_Resp_FollowUp(const struct Packet_packet *inPacket, stru
 
     return 0;
 }
-void PTP_convertTimestampPTPtoL(const struct PTP_timestamp *ptp, struct Packet_timestamp *l)
+
+
+void PTP_convertTimestampPTPtoL(const struct PTP_timestamp *ptp, struct Common_timestamp *l)
 {
     if(ptp == NULL || l == NULL)
         return;
@@ -265,7 +267,7 @@ void PTP_convertTimestampPTPtoL(const struct PTP_timestamp *ptp, struct Packet_t
     l->t.tv_nsec = Common_nToLu64(ptp->nsec);
 }
 
-void PTP_convertTimestampLtoPTP(const struct Packet_timestamp *l, struct PTP_timestamp *ptp)
+void PTP_convertTimestampLtoPTP(const struct Common_timestamp *l, struct PTP_timestamp *ptp)
 {
     if(ptp == NULL || l == NULL)
         return;
@@ -273,17 +275,4 @@ void PTP_convertTimestampLtoPTP(const struct Packet_timestamp *l, struct PTP_tim
     ptp->sec_msb = 0;
     ptp->sec_lsb = Common_lToNu32(l->t.tv_sec);
     ptp->nsec = Common_lToNu32(l->t.tv_nsec);
-}
-
-double PTP_diffTimestamp(const struct Packet_timestamp *start, const struct Packet_timestamp *end)
-{
-    double resu;
-
-    if(start == NULL || end == NULL)
-        return 0;
-
-    resu = end->t.tv_nsec / 1000000000.0 + end->t.tv_sec;
-    resu -= start->t.tv_nsec / 1000000000.0 + start->t.tv_sec;
-
-    return resu;
 }

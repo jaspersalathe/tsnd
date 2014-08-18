@@ -9,8 +9,14 @@
 #define COMMON_H_
 
 #include <inttypes.h>
+#include <time.h>
 
 #define PACKED __attribute__((packed))
+
+struct Common_timestamp
+{
+    struct timespec t;
+};
 
 uint16_t Common_nToLu16(const uint16_t data);
 uint16_t Common_lToNu16(const uint16_t data);
@@ -26,5 +32,7 @@ uint64_t Common_nToLu64(const uint64_t data);
 uint64_t Common_lToNu64(const uint64_t data);
 int64_t Common_nToLi64(const int64_t data);
 int64_t Common_lToNi64(const int64_t data);
+
+double Common_diffTimestamp(const struct Common_timestamp *start, const struct Common_timestamp *end);
 
 #endif /* COMMON_H_ */
