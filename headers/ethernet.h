@@ -15,6 +15,7 @@
 #define ETHERNET_MAC_LEN 6
 #define ETHERNET_TYPE_LEN 2
 #define ETHERNET_VLAN_TCI_LEN 2
+#define ETHERNET_VID_MASK 0x7FF
 
 
 struct Ethernet_header

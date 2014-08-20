@@ -20,6 +20,7 @@ CFLAGS += -Wall -std=gnu99
 CAPPSRC = ./
 CAPPSRC += ./headers
 CAPPSRC += ./ptp
+CAPPSRC += ./bridge
 
 INC = ./
 
