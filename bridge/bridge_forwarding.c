@@ -66,11 +66,11 @@ static struct HandlerTable_filterEntry bridgeFilter[] =
 };
 
 static void packetHandler(const struct Packet_packet *packet, void *context);
-static void learnMACNotifier(struct BridgeForwarding_state *state, uint8_t mac[ETHERNET_MAC_LEN], uint32_t portIdx);
-static int64_t findVLANbyVID(struct BridgeForwarding_state *state, uint16_t vid);
-static int64_t findMacFilterbyMAC(struct BridgeForwarding_state *state, uint8_t mac[ETHERNET_MAC_LEN]);
-static int64_t findMacLearnedbyMAC(struct BridgeForwarding_state *state, uint8_t mac[ETHERNET_MAC_LEN]);
-static int32_t cmpMacs(uint8_t mac1[ETHERNET_MAC_LEN], uint8_t mac2[ETHERNET_MAC_LEN]);
+static void learnMACNotifier(struct BridgeForwarding_state *state, const uint8_t mac[ETHERNET_MAC_LEN], const uint32_t portIdx, const struct Common_timestamp *t);
+static int64_t findVLANbyVID(const struct BridgeForwarding_state *state, const uint16_t vid);
+static int64_t findMacFilterbyMAC(const struct BridgeForwarding_state *state, const uint8_t mac[ETHERNET_MAC_LEN]);
+static int64_t findMacLearnedbyMAC(const struct BridgeForwarding_state *state, const uint8_t mac[ETHERNET_MAC_LEN]);
+static int32_t cmpMacs(const uint8_t mac1[ETHERNET_MAC_LEN], const uint8_t mac2[ETHERNET_MAC_LEN]);
 
 /*
  * Initialize bridge forwarding logic.
@@ -90,6 +90,7 @@ int32_t BridgeForwarding_init(struct BridgeForwarding_state *state, struct Handl
     struct internalState *iState = NULL;
     struct HandlerTable_tableEntry *entry = NULL;
     uint16_t *defVIDs = NULL;
+    uint32_t *portList;
 
     if(state == NULL || table == NULL || ports == NULL)
         return -1;
@@ -99,7 +100,8 @@ int32_t BridgeForwarding_init(struct BridgeForwarding_state *state, struct Handl
     iState = malloc(sizeof(struct internalState));
     defVIDs = malloc(((uint64_t)portCnt) * sizeof(uint16_t));
     entry = malloc(sizeof(struct HandlerTable_tableEntry));
-    if(iState == NULL || defVIDs == NULL || entry == NULL)
+    portList = malloc(portCnt * sizeof(uint32_t));
+    if(iState == NULL || defVIDs == NULL || entry == NULL || portList == NULL)
     {   resu = -3; goto fail; }
 
     memset(iState, 0, sizeof(struct internalState));
@@ -130,6 +132,13 @@ int32_t BridgeForwarding_init(struct BridgeForwarding_state *state, struct Handl
     entry->handler = &packetHandler;
     entry->context = state;
 
+    // add default VLAN
+    for(i = 0; i < portCnt; i++)
+        portList[i] = i;
+    if(BridgeForwarding_addVLAN(state, BRIDGE_DEF_VID, portList, portCnt) != 0)
+    {   resu = -3; goto fail; }
+    free(portList);
+
     if(HandlerTable_registerHandler(table, entry) != 0)
     {   resu = -2; goto fail; }
 
@@ -146,6 +155,9 @@ fail:
 
     if(entry != NULL)
         free(entry);
+
+    if(portList != NULL)
+        free(portList);
 
     return resu;
 }
@@ -494,9 +506,13 @@ static void packetHandler(const struct Packet_packet *p, void *context)
     uint16_t vid;
     uint8_t *portsEnabled;
     int64_t vIdx, mfIdx, mlIdx;
+    struct vlan *v = NULL;
+    struct macFilter *f = NULL;
+    struct macLearningEntry *l = NULL;
     struct Ethernet_headerVLAN *ethHdr;
-    uint32_t i;
-    struct Packet_packet pOut;
+    uint32_t i, idx, mask;
+    struct Packet_packet pOut, pOutV;
+    int wasTagged;
 
     if(context == NULL || p == NULL)
         return;
@@ -517,10 +533,12 @@ static void packetHandler(const struct Packet_packet *p, void *context)
     if(Ethernet_isPacketVLAN(p->packet, p->len))
     {
         vid = Common_nToLu16( *( (uint16_t*)(ethHdr->tci) ) ) & ETHERNET_VID_MASK;
+        wasTagged = 1;
     }
     else
     {
         vid = is->defaultVIDs[p->port];
+        wasTagged = 0;
     }
 
     portsEnabled = malloc((s->portCnt / 8) + 1);
@@ -535,33 +553,112 @@ static void packetHandler(const struct Packet_packet *p, void *context)
     if(vIdx < 0)
         goto noForwarding;
 
-    // TODO: analyse VLAN, filterdb and learned macs
+    idx = PORTNO_TO_PORTFLAGSIDX(p->port);
+    mask = PORTNO_TO_PORTFLAGSMASK(p->port);
 
+    v = &(is->vlans[vIdx]);
 
-    pOut.packet = p->packet;
-    pOut.len = p->len;
+    if((v->portFlags[idx] & mask ) == 0)
+        goto noForwarding; // this vid is not active on this port
+
+    if(mfIdx >= 0)
+        f = &(is->macFilters[mfIdx]);
+    if(mlIdx >= 0)
+        l = &(is->macLearnings[mlIdx]);
+
+    if(wasTagged)
+    {
+        pOutV.packet = p->packet;
+        pOutV.len = p->len;
+        // initialize untagged packet format
+        pOut.len = p->len - 4;
+        pOut.packet = malloc(pOut.len);
+        if(pOut.packet == NULL)
+            goto fail;
+        memcpy(&(pOut.packet[ 0]), &(p->packet[ 0]),          12); // copy macs
+        memcpy(&(pOut.packet[12]), &(p->packet[16]), p->len - 16); // copy type and payload
+    }
+    else
+    {
+        pOut.packet = p->packet;
+        pOut.len = p->len;
+        // initialize tagged packet format
+        pOutV.len = p->len + 4;
+        pOutV.packet = malloc(pOutV.len);
+        if(pOutV.packet == NULL)
+            goto fail;
+        memcpy(&(pOutV.packet[ 0]), &(p->packet[ 0]),          12); // copy macs
+        pOutV.packet[12] = 0x81; // 802.1Q Tag type
+        pOutV.packet[13] = 0x00;
+        pOutV.packet[14] = 0xFF & (vid >> 8); // tci
+        pOutV.packet[15] = 0xFF & vid;
+        memcpy(&(pOutV.packet[16]), &(p->packet[12]), p->len - 12); // copy type and payload
+
+    }
 
     for(i = 0; i < s->portCnt; i++)
     {
-        uint32_t idx = PORTNO_TO_PORTFLAGSIDX(i);
-        uint32_t mask = PORTNO_TO_PORTFLAGSMASK(i);
-        if((portsEnabled[idx] & mask) != 0)
-            Port_send(&(s->ports[i]), &pOut);
+        idx = PORTNO_TO_PORTFLAGSIDX(i);
+        mask = PORTNO_TO_PORTFLAGSMASK(i);
+        if((v->portFlags[idx] & mask) == 0)
+            continue; // port is not in vlan
+        if(f != NULL)
+            if((f->portFlags[idx] & mask) == 0)
+                continue; // this port is filtered by rule
+        if(l != NULL)
+            if((l->outPort != i) && f == NULL)
+                continue; // no filtering rule and this is not the known port for target host
+
+        // okay, if we are here, then the packet is supposed to be sent on this port
+        Port_send(&(s->ports[i]), &pOut);
+
         // TODO: analyze outgoing timestamps ...
     }
 
 noForwarding:
+fail:
 
+    if(wasTagged && pOut.packet != NULL)
+        free(pOut.packet);
+    else if(pOutV.packet != NULL)
+        free(pOutV.packet);
     free(portsEnabled);
 
-    learnMACNotifier(s, ethHdr->src, p->port);
+    learnMACNotifier(s, ethHdr->src, p->port, &(p->t));
 }
 
-static void learnMACNotifier(struct BridgeForwarding_state *state, uint8_t mac[ETHERNET_MAC_LEN], uint32_t portIdx)
+static void learnMACNotifier(struct BridgeForwarding_state *state, const uint8_t mac[ETHERNET_MAC_LEN], const uint32_t portIdx, const struct Common_timestamp *t)
 {
+    int64_t idx = findMacLearnedbyMAC(state, mac);
+    struct internalState *is = state->state;
+
+    if(idx < 0)
+    {
+        struct macLearningEntry *old = is->macLearnings;
+        if(is->macLearningCnt <= is->macLearningAllocCnt)
+        {
+            is->macLearningAllocCnt += 4;
+            is->macLearnings = realloc(old, is->macLearningAllocCnt * sizeof(struct macLearningEntry));
+            if(is->macLearnings == NULL)
+            {
+                is->macLearnings = old;
+                is->macLearningAllocCnt -= 4;
+                return;
+            }
+        }
+        idx = is->macLearningCnt++;
+
+        memcpy(is->macLearnings[idx].mac, mac, ETHERNET_MAC_LEN);
+
+        fprintf(stdout, "new mac: %02X:%02X:%02X:%02X:%02X:%02X\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    }
+
+
+    is->macLearnings[idx].outPort = portIdx;
+    is->macLearnings[idx].lastPacketTime = *t;
 }
 
-static int64_t findVLANbyVID(struct BridgeForwarding_state *state, uint16_t vid)
+static int64_t findVLANbyVID(const struct BridgeForwarding_state *state, const uint16_t vid)
 {
     struct internalState *iState;
     uint32_t i;
@@ -574,7 +671,7 @@ static int64_t findVLANbyVID(struct BridgeForwarding_state *state, uint16_t vid)
     return -1;
 }
 
-static int64_t findMacFilterbyMAC(struct BridgeForwarding_state *state, uint8_t mac[ETHERNET_MAC_LEN])
+static int64_t findMacFilterbyMAC(const struct BridgeForwarding_state *state, const uint8_t mac[ETHERNET_MAC_LEN])
 {
     struct internalState *iState;
     uint32_t i;
@@ -589,7 +686,7 @@ static int64_t findMacFilterbyMAC(struct BridgeForwarding_state *state, uint8_t 
 }
 
 
-static int64_t findMacLearnedbyMAC(struct BridgeForwarding_state *state, uint8_t mac[ETHERNET_MAC_LEN])
+static int64_t findMacLearnedbyMAC(const struct BridgeForwarding_state *state, const uint8_t mac[ETHERNET_MAC_LEN])
 {
     struct internalState *iState;
     uint32_t i;
@@ -609,7 +706,7 @@ static int64_t findMacLearnedbyMAC(struct BridgeForwarding_state *state, uint8_t
  *             0: equal
  *            -1: mac1 is larger
  */
-static int32_t cmpMacs(uint8_t mac1[ETHERNET_MAC_LEN], uint8_t mac2[ETHERNET_MAC_LEN])
+static int32_t cmpMacs(const uint8_t mac1[ETHERNET_MAC_LEN], const uint8_t mac2[ETHERNET_MAC_LEN])
 {
     uint32_t i;
     for(i = 0; i < ETHERNET_MAC_LEN; i++)

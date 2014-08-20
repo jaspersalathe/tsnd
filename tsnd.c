@@ -19,6 +19,7 @@
 #include "ptp/simple_gptp_handler.h"
 #include "port.h"
 #include "packet.h"
+#include "bridge/bridge_forwarding.h"
 
 
 #define PACKLEN 2048
@@ -29,6 +30,7 @@ struct HandlerTable_table handlerTable;
 struct Port *ports;
 uint32_t portCnt;
 struct pollfd *pollFds;
+struct BridgeForwarding_state bridgeForwardingState;
 
 
 void help(char *myname)
@@ -49,7 +51,8 @@ void init_endnode(struct HandlerTable_table *handlerTable, struct Port *ports, u
 
 void init_bridgenode(struct HandlerTable_table *handlerTable, struct Port *ports, uint32_t portCnt)
 {
-
+    if(BridgeForwarding_init(&bridgeForwardingState, handlerTable, ports, portCnt) != 0)
+        exit(1);
 }
 
 
@@ -65,7 +68,7 @@ int main(int argc, char **argv)
     int bridgemode = 0;
 
     int c;
-    while((c = getopt(argc, argv, "hib:")) > 0)
+    while((c = getopt(argc, argv, "hbi:")) > 0)
     {
         switch (c) 
         {
@@ -136,10 +139,12 @@ int main(int argc, char **argv)
 
     if(bridgemode)
     {
+        puts("initing in bridgemode");
         init_bridgenode(&handlerTable, ports, portCnt);
     }
     else
     {
+        puts("initing in nodemode");
         init_endnode(&handlerTable, ports, portCnt);
     }
 
