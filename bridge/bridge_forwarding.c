@@ -609,6 +609,10 @@ static void packetHandler(const struct Packet_packet *p, void *context)
             if((l->outPort != i) && f == NULL)
                 continue; // no filtering rule and this is not the known port for target host
 
+        if(l == NULL && f == NULL)
+            if(i == p->port)
+                continue; // do not broadcast packet to sender (if there is no rule saying anything else)
+
         // okay, if we are here, then the packet is supposed to be sent on this port
         Port_send(&(s->ports[i]), &pOut);
 
