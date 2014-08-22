@@ -15,7 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-
+#include <errno.h>
 
 #define PORTNO_TO_PORTFLAGSIDX(portNo)  (portNo / 8)
 #define PORTNO_TO_PORTFLAGSMASK(portNo) (1 << (portNo % 8))
@@ -550,6 +550,11 @@ static void packetHandler(const struct Packet_packet *p, void *context)
     mfIdx = findMacFilterbyMAC(s, ethHdr->dst);
     mlIdx = findMacLearnedbyMAC(s, ethHdr->dst);
 
+    memset(&pOut, 0, sizeof(pOut));
+    memset(&pOutV, 0, sizeof(pOutV));
+
+    fprintf(stdout, ">> %02X:%02X:%02X:%02X:%02X:%02X (%u): %u [%c:%u] -> ", ethHdr->dst[0], ethHdr->dst[1], ethHdr->dst[2], ethHdr->dst[3], ethHdr->dst[4], ethHdr->dst[5], p->len, p->port, wasTagged ? 't' : 'u', vid);
+
     if(vIdx < 0)
         goto noForwarding;
 
@@ -588,8 +593,8 @@ static void packetHandler(const struct Packet_packet *p, void *context)
         if(pOutV.packet == NULL)
             goto fail;
         memcpy(&(pOutV.packet[ 0]), &(p->packet[ 0]),          12); // copy macs
-        pOutV.packet[12] = 0x81; // 802.1Q Tag type
-        pOutV.packet[13] = 0x00;
+        pOutV.packet[12] = ETHERNET_TYPE_VLAN[0]; // 802.1Q Tag type
+        pOutV.packet[13] = ETHERNET_TYPE_VLAN[1];
         pOutV.packet[14] = 0xFF & (vid >> 8); // tci
         pOutV.packet[15] = 0xFF & vid;
         memcpy(&(pOutV.packet[16]), &(p->packet[12]), p->len - 12); // copy type and payload
@@ -598,8 +603,11 @@ static void packetHandler(const struct Packet_packet *p, void *context)
 
     for(i = 0; i < s->portCnt; i++)
     {
+        struct Packet_packet *toSend;
+
         idx = PORTNO_TO_PORTFLAGSIDX(i);
         mask = PORTNO_TO_PORTFLAGSMASK(i);
+
         if((v->portFlags[idx] & mask) == 0)
             continue; // port is not in vlan
         if(f != NULL)
@@ -608,23 +616,34 @@ static void packetHandler(const struct Packet_packet *p, void *context)
         if(l != NULL)
             if((l->outPort != i) && f == NULL)
                 continue; // no filtering rule and this is not the known port for target host
-
         if(l == NULL && f == NULL)
             if(i == p->port)
                 continue; // do not broadcast packet to sender (if there is no rule saying anything else)
 
         // okay, if we are here, then the packet is supposed to be sent on this port
-        Port_send(&(s->ports[i]), &pOut);
 
+        // determine, if it is to be sent tagged or untagged
+        if(vid == is->defaultVIDs[i])
+            toSend = &pOut;
+        else
+            toSend = &pOutV;
+
+        if(Port_send(&(s->ports[i]), toSend))
+            fprintf(stdout, "<%d,%s>", errno, strerror(errno));
+        portsEnabled[idx] |= mask;
         // TODO: analyze outgoing timestamps ...
     }
 
 noForwarding:
 fail:
 
+    for(i = 0; i < s->portCnt; i++)
+        fprintf(stdout, "%s", (portsEnabled[PORTNO_TO_PORTFLAGSIDX(i)] & PORTNO_TO_PORTFLAGSMASK(i)) ? "1" : "0");
+    fputs("\n", stdout);
+
     if(wasTagged && pOut.packet != NULL)
         free(pOut.packet);
-    else if(pOutV.packet != NULL)
+    if(!wasTagged && pOutV.packet != NULL)
         free(pOutV.packet);
     free(portsEnabled);
 
@@ -654,7 +673,7 @@ static void learnMACNotifier(struct BridgeForwarding_state *state, const uint8_t
 
         memcpy(is->macLearnings[idx].mac, mac, ETHERNET_MAC_LEN);
 
-        fprintf(stdout, "new mac: %02X:%02X:%02X:%02X:%02X:%02X\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+        fprintf(stdout, "new mac: %02X:%02X:%02X:%02X:%02X:%02X on %u\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], portIdx);
     }
 
 
