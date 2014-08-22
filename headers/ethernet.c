@@ -9,15 +9,14 @@
 
 #include <stdlib.h>
 
-
 const uint8_t ETHERNET_MAC_MASK[ETHERNET_MAC_LEN] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 const uint8_t ETHERNET_TYPE_MASK[ETHERNET_TYPE_LEN] = {0xFF, 0xFF};
 
-const uint8_t ETHERNET_TYPE_VLAN[ETHERNET_TYPE_LEN] = {0x81, 0x80};
+const uint8_t ETHERNET_TYPE_VLAN[ETHERNET_TYPE_LEN] = {0x81, 0x00};
 
 int Ethernet_isPacketVLAN(const uint8_t *packet, const uint32_t len)
 {
-    const struct Ethernet_headerVLAN *eth = (struct Ethernet_headerVLAN*)packet;
+    const struct Ethernet_header *eth = (struct Ethernet_header*)packet;
 
     if(len < sizeof(struct Ethernet_headerVLAN) || eth == NULL)
         return 0;
