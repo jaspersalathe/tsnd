@@ -30,6 +30,7 @@ struct Port
  *            -3: could not find interface
  *            -4: could not bind interface
  *            -5: could not set promiscuous mode
+ *            -6: could not configure device
  */
 int32_t Port_open(const char *devName, struct Port *port);
 

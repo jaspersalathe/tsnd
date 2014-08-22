@@ -11,10 +11,16 @@
 #include <time.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
-#include <netpacket/packet.h>
+//#include <netpacket/packet.h>
 #include <net/ethernet.h>
 #include <net/if.h>
 #include <arpa/inet.h>
+#include <linux/if_packet.h>
+#include <errno.h>
+#include <stdio.h>
+
+#include "headers/ethernet.h"
+
 
 
 #define MIN(x, y)                   \
@@ -67,27 +73,38 @@ static void getTime(struct timespec *t)
  *            -3: could not find interface
  *            -4: could not bind interface
  *            -5: could not set promiscuous mode
+ *            -6: could not configure device
  */
 int32_t Port_open(const char *devName, struct Port *port)
 {
     struct sockaddr_ll sockaddr;
     struct packet_mreq pReq;
+    struct ifreq ifr;
+    int val;
 
     if(devName == NULL || port == NULL)
         return -1;
 
     port->devName = strdup(devName);
 
+    // create socket
     port->rawFd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
     if(port->rawFd == -1)
         return -2;
 
+    // get infos
     if(getInterfaceIndex(port) != 0)
         return -3;
 
     if(getInterfaceMac(port) != 0)
         return -3;
 
+    // enable delivery of auxdata
+    val = 1;
+    if(setsockopt(port->rawFd, SOL_PACKET, PACKET_AUXDATA, &val, sizeof(int)))
+        return -6;
+
+    // bind
     memset(&sockaddr, 0, sizeof(sockaddr));
     sockaddr.sll_ifindex = port->ifIdx;
     sockaddr.sll_family = AF_PACKET;
@@ -98,6 +115,16 @@ int32_t Port_open(const char *devName, struct Port *port)
     if(setsockopt(port->rawFd, SOL_SOCKET, SO_BINDTODEVICE, port->devName, strlen(port->devName)))
         return -4;
 
+    // enable promiscuous mode for device
+    memset(&ifr, 0, sizeof(ifr));
+    strcpy(ifr.ifr_name, port->devName);
+    if(ioctl(port->rawFd, SIOCGIFFLAGS, &ifr))
+    {   fprintf(stderr, "error: %d\n", errno); return -6; }
+    ifr.ifr_flags |= IFF_PROMISC;
+    if(ioctl(port->rawFd, SIOCSIFFLAGS, &ifr))
+        return -5;
+
+    // set promisciuous mode for this socket
     pReq.mr_ifindex = port->rawFd;
     pReq.mr_type = PACKET_MR_PROMISC;
     pReq.mr_alen = 0;
@@ -197,6 +224,16 @@ int32_t Port_send(struct Port *port, struct Packet_packet *packet)
     return 0;
 }
 
+
+static struct tpacket_auxdata* getAuxdata(struct msghdr *h)
+{
+    struct cmsghdr *act;
+    for(act = CMSG_FIRSTHDR(h); act != NULL; act = CMSG_NXTHDR(h, act))
+        if(act->cmsg_level == SOL_PACKET && act->cmsg_type == PACKET_AUXDATA)
+            return (struct tpacket_auxdata*) CMSG_DATA(act);
+    return NULL;
+}
+
 /*
  * Return values:
  *             0: success
@@ -209,9 +246,13 @@ int32_t Port_recv(struct Port *port, struct Packet_packet *packet)
     struct msghdr hdr;
     struct iovec iov;
     char control[256];
+    struct tpacket_auxdata *auxdata;
+    uint32_t origLen;
 
     if(port == NULL || packet == NULL || packet->packet == NULL)
         return -1;
+
+    origLen = packet->len;
 
     hdr.msg_name = NULL; hdr.msg_namelen = 0;
     hdr.msg_flags = 0;
@@ -231,6 +272,22 @@ int32_t Port_recv(struct Port *port, struct Packet_packet *packet)
     packet->port = port->portIdx;
     getTime(&(packet->t.t));
     packet->len = resu;
+
+    auxdata = getAuxdata(&hdr);
+
+    if(auxdata != NULL && auxdata->tp_vlan_tci != 0)
+    {
+        // okay, insert selfmade vlan header into packet
+        if(packet->len + 4 > origLen)
+            return -2;
+
+        memmove(&(packet->packet[16]), &(packet->packet[12]), packet->len - 12);
+        packet->packet[12] = ETHERNET_TYPE_VLAN[0];
+        packet->packet[13] = ETHERNET_TYPE_VLAN[1];
+        packet->packet[14] = 0xFF & (auxdata->tp_vlan_tci >> 8);
+        packet->packet[15] = 0xFF & (auxdata->tp_vlan_tci >> 0);
+        packet->len += 4;
+    }
 
     return 0;
 }
