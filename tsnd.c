@@ -22,7 +22,7 @@
 #include "bridge/bridge_forwarding.h"
 
 
-#define PACKLEN 2048
+#define PACKLEN (64*1024)
 
 char str[4096];
 
@@ -51,8 +51,13 @@ void init_endnode(struct HandlerTable_table *handlerTable, struct Port *ports, u
 
 void init_bridgenode(struct HandlerTable_table *handlerTable, struct Port *ports, uint32_t portCnt)
 {
+    uint32_t enabled[] = {0, 1};
     if(BridgeForwarding_init(&bridgeForwardingState, handlerTable, ports, portCnt) != 0)
         exit(1);
+    if(BridgeForwarding_addVLAN(&bridgeForwardingState, 4, enabled, 2))
+        fputs("unable to add VLAN\n", stderr);
+    if(BridgeForwarding_setPortDefauldVID(&bridgeForwardingState, 4, 1))
+        fputs("unable to set default VID\n", stderr);
 }
 
 
