@@ -16,7 +16,7 @@
 enum FDB_RuleType
 {
     FDB_RuleType_StaticFiltering,
-    FDB_RuleType_StaticVLANRegistraiton,
+    FDB_RuleType_StaticVLANRegistration,
     FDB_RuleType_DynamicFiltering,
     FDB_RuleType_MACAddressRegistration,
     FDB_RuleType_DynamicVLANRegistration,
@@ -33,25 +33,33 @@ enum FDB_AddressType
     FDB_AddressType_Group
 };
 
-enum FDB_PortMapEntry
+enum FDB_PortMapResult
 {
-    FDP_PortMapEntry_Filter,
-    FDP_PortMapEntry_Forward,
-    FDP_PortMapEntry_Dynamic,
+    FDB_PortMapResult_Filter,
+    FDB_PortMapResult_Forward,
+    FDB_PortMapResult_Dynamic,
+};
+
+struct FDB_PortMapEntry
+{
+    enum FDB_PortMapResult filter;
+    uint8_t prio; // to distinguish the queue to be used for forwarding
+    uint8_t forwardUntagged; // only for static VLAN rules
 };
 
 struct FDB_StaticFiltering
 {
     uint8_t mac[ETHERNET_MAC_LEN];
     enum FDB_AddressType addrType;
-    enum FDB_PortMapEntry *portMap;
+    uint16_t vid;
+    struct FDB_PortMapEntry *portMap;
     uint32_t portMapCnt;
 };
 
 struct FDB_StaticVLANRegistration
 {
     uint16_t vid;
-    enum FDB_PortMapEntry *portMap;
+    struct FDB_PortMapEntry *portMap;
     uint32_t portMapCnt;
     /*
      * Following mapping for portMap:
@@ -65,7 +73,8 @@ struct FDB_DynamicFiltering
 {
     uint8_t mac[ETHERNET_MAC_LEN];
     uint16_t vid; // korrekt: fid
-    uint32_t portMap; // Port to forward to.
+    uint32_t portMapPort; // Port to forward to ...
+    uint8_t portMapPrio;  // ... and priority to use.
 };
 
 struct FDB_MACAddressRegistration
@@ -74,7 +83,7 @@ struct FDB_MACAddressRegistration
     enum FDB_AddressType addrType;
     // not allowed: AllUnregIndividual
     uint16_t vid;
-    enum FDB_PortMapEntry *portMap;
+    struct FDB_PortMapEntry *portMap;
     uint32_t portMapCnt;
     // Dynamic is invalid for portMap.
 };
@@ -82,7 +91,7 @@ struct FDB_MACAddressRegistration
 struct FDB_DynamicVLANRegistration
 {
     uint16_t vid;
-    enum FDB_PortMapEntry *portMap;
+    struct FDB_PortMapEntry *portMap;
     uint32_t portMapCnt;
     // Dynamic is invalid for portMap.
 };
@@ -91,7 +100,7 @@ struct FDB_DynamicReservation
 {
     uint8_t mac[ETHERNET_MAC_LEN];
     uint16_t vid;
-    enum FDB_PortMapEntry *portMap;
+    struct FDB_PortMapEntry *portMap;
     uint32_t portMapCnt;
     // Dynamic is invalid for portMap.
 };
@@ -106,7 +115,7 @@ struct FDB_rule
         struct FDB_DynamicFiltering dynamicFiltering;
         struct FDB_MACAddressRegistration macAddressRegistration;
         struct FDB_DynamicVLANRegistration dynamicVLANRegistration;
-        struct FDB_DynamicReservation dynamicRegistration;
+        struct FDB_DynamicReservation dynamicReservation;
     } rule;
 };
 
@@ -118,7 +127,6 @@ struct FDB_state
     struct FDB_rule *rules;
     uint32_t ruleCnt;
     uint32_t ruleAllocCnt;
-    int rulesStaticallyAllocated;
 };
 
 /*
@@ -127,14 +135,15 @@ struct FDB_state
  *            -1: pointer NULL
  *
  */
-int32_t FDB_init(struct FDB_state *state, struct BridgeForwarding_state *bridgeForwarding, uint32_t portCnt, struct FDB_rule *ruleMemory, uint32_t ruleAllocCnt);
+int32_t FDB_init(struct FDB_state *state, struct BridgeForwarding_state *bridgeForwarding, uint32_t portCnt);
 
 /*
  * Return values:
  *             0: success
  *            -1: pointer NULL
  *            -2: rule invalid
- *            -3: no memory left
+ *            -3: could not allocate memory
+ *            -4: rule not allowed
  */
 int32_t FDB_addRule(struct FDB_state *state, struct FDB_rule *rule);
 /*
