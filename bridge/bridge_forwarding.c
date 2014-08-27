@@ -354,6 +354,30 @@ int32_t BridgeForwarding_delVLAN(struct BridgeForwarding_state *state, uint16_t 
  * Return values:
  *             0: success
  *            -1: pointer NULL
+ */
+int32_t BridgeForwarding_delAllVLAN(struct BridgeForwarding_state *state)
+{
+    struct internalState *iState;
+    uint32_t i, cnt;
+
+    if(state == NULL || state->state == NULL)
+        return -1;
+
+    iState = state->state;
+
+    cnt = iState->vlanCnt;
+    iState->vlanCnt = 0;
+
+    for(i = 0; i < cnt; i++)
+        free(iState->vlans[i].portFlags);
+
+    return 0;
+}
+
+/*
+ * Return values:
+ *             0: success
+ *            -1: pointer NULL
  *            -2: entry already exists
  *            -3: invalid port
  *            -4: could not allocate memory

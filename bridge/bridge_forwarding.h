@@ -72,6 +72,12 @@ int32_t BridgeForwarding_updateVLAN(struct BridgeForwarding_state *state, uint16
  *            -3: VID invalid
  */
 int32_t BridgeForwarding_delVLAN(struct BridgeForwarding_state *state, uint16_t vid);
+/*
+ * Return values:
+ *             0: success
+ *            -1: pointer NULL
+ */
+int32_t BridgeForwarding_delAllVLAN(struct BridgeForwarding_state *state);
 
 /*
  * Return values:
