@@ -345,17 +345,16 @@ static int32_t updateBridgeForwarding(const struct FDB_state *s)
 {
     uint32_t i, j, resu = 0;
 
-    // start with VLANs
+    // start with VLANs filtering rules
     {
         uint32_t vlanCnt = 0;
         uint16_t *vlans = malloc(s->ruleCnt * sizeof(uint16_t));
         struct FDB_PortMapEntry **staticPortMaps = malloc(s->ruleCnt * sizeof(struct FDB_PortMapEntry*));
         struct FDB_PortMapEntry **dynamicPortMaps = malloc(s->ruleCnt * sizeof(struct FDB_PortMapEntry*));
-        uint32_t *portEnabled = malloc(s->portCnt * sizeof(uint32_t));
-        uint32_t portEnabledCnt;
+        enum BridgeForwarding_action *portAction = malloc(s->portCnt * sizeof(enum BridgeForwarding_action));
         uint16_t *untaggedPortVlans = malloc(s->portCnt * sizeof(uint16_t));
 
-        if(vlans == NULL || staticPortMaps == NULL || dynamicPortMaps == NULL || portEnabled == NULL || untaggedPortVlans == NULL)
+        if(vlans == NULL || staticPortMaps == NULL || dynamicPortMaps == NULL || portAction == NULL || untaggedPortVlans == NULL)
         {
             resu = -1;
             goto vlanEnd;
@@ -405,7 +404,6 @@ static int32_t updateBridgeForwarding(const struct FDB_state *s)
         {   resu = -2; goto vlanEnd; }
         for(i = 0; i < vlanCnt; i++)
         {
-            portEnabledCnt = 0;
             for(j = 0; j < s->portCnt; j++)
             {
                 int8_t forward = -1;
@@ -429,10 +427,12 @@ static int32_t updateBridgeForwarding(const struct FDB_state *s)
                         forward = 1;
                 }
                 if(forward == 1)
-                    portEnabled[portEnabledCnt++] = j;
+                    portAction[j] = BridgeForwarding_action_Forward;
+                else
+                    portAction[j] = BridgeForwarding_action_Filter;
             }
 
-            if(BridgeForwarding_addVLAN(s->bridgeForwarding, vlans[i], portEnabled, portEnabledCnt) != 0)
+            if(BridgeForwarding_addVLAN(s->bridgeForwarding, vlans[i], portAction) != 0)
             {   resu = -2; goto vlanEnd; }
         }
 
@@ -450,15 +450,73 @@ vlanEnd:
             free(staticPortMaps);
         if(dynamicPortMaps != NULL)
             free(dynamicPortMaps);
-        if(portEnabled != NULL)
-            free(portEnabled);
+        if(portAction != NULL)
+            free(portAction);
         if(untaggedPortVlans != NULL)
             free(untaggedPortVlans);
         if(resu != 0)
             return resu;
     }
 
-    // here come the mac rules ...
+    // here come the mac filtering rules ...
+    {
+        enum BridgeForwarding_action *portAction = malloc(s->portCnt * sizeof(enum BridgeForwarding_action));
+
+        if(portAction == NULL)
+        {
+            resu = -1;
+            goto macEnd;
+        }
+
+        if(BridgeForwarding_delAllDstMACFilter(
+                s->bridgeForwarding) != 0)
+        {   resu = -2; goto vlanEnd; }
+
+        // search for static filtering rules for defined mac addresses
+        for(i = 0; i < s->ruleCnt; i++)
+        {
+            uint8_t *curMac;
+            uint32_t curPrio;
+            uint16_t curVID, curVIDmask = ETHERNET_VID_MASK;
+            struct FDB_PortMapEntry *curPortMap;
+
+            if(s->rules[i].type != FDB_RuleType_StaticFiltering)
+                continue;
+            if(   s->rules[i].rule.staticFiltering.addrType != FDB_AddressType_Individual
+               || s->rules[i].rule.staticFiltering.addrType != FDB_AddressType_Group)
+                continue;
+
+            curMac = s->rules[i].rule.staticFiltering.mac;
+            curPrio = s->rules[i].rule.staticFiltering.prio;
+            curVID = s->rules[i].rule.staticFiltering.vid;
+            if(curVID == ETHERNET_VID_WILDCARD)
+                curVIDmask = 0x0000;
+            curPortMap = s->rules[i].rule.staticFiltering.portMap;
+
+            for(j = 0; j < s->portCnt; j++)
+            {
+                if(curPortMap[j].filter == FDB_PortMapResult_Forward)
+                    portAction[j] = BridgeForwarding_action_Forward;
+                else if(curPortMap[j].filter == FDB_PortMapResult_Dynamic)
+                    portAction[j] = BridgeForwarding_action_Dynamic;
+                else
+                    portAction[j] = BridgeForwarding_action_Filter;
+            }
+
+            if(BridgeForwarding_addDstMACFilter(s->bridgeForwarding, curMac, ETHERNET_MAC_MASK, curVID, curVIDmask, portAction, curPrio) != 0)
+            {   resu = -2; goto macEnd; }
+        }
+
+
+
+        // TODO: clear all dynamic entries in BridgeForwarding
+macEnd:
+        if(portAction != NULL)
+            free(portAction);
+        if(resu != 0)
+            return resu;
+    }
+
     return 0;
 }
 

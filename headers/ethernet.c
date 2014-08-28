@@ -36,3 +36,35 @@ uint32_t Ethernet_getHeaderLength(const uint8_t *packet, const uint32_t len)
     else
         return sizeof(struct Ethernet_header);
 }
+
+/*
+ * Return values:
+ *             1: mac2 is larger
+ *             0: equal
+ *            -1: mac1 is larger
+ */
+int32_t Ethernet_cmpMacs(const uint8_t mac1[ETHERNET_MAC_LEN], const uint8_t mac2[ETHERNET_MAC_LEN])
+{
+    return Ethernet_cmpMacsMasked(mac1, mac2, ETHERNET_MAC_MASK);
+}
+
+int32_t Ethernet_cmpMacsMasked(const uint8_t mac1[ETHERNET_MAC_LEN], const uint8_t mac2[ETHERNET_MAC_LEN], const uint8_t mask[ETHERNET_MAC_LEN])
+{
+    uint32_t i;
+    uint8_t b1, b2;
+    for(i = 0; i < ETHERNET_MAC_LEN; i++)
+    {
+        b1 = mac1[i] & mask[i];
+        b2 = mac2[i] & mask[i];
+        if(b2 > b1)
+            return 1;
+        else if(b1 > b2)
+            return -1;
+    }
+    return 0;
+}
+
+int Ethernet_isGroupMac(const uint8_t mac[ETHERNET_MAC_LEN])
+{
+    return (mac[0] & ETHERNET_MAC_GROUP_MASK) == ETHERNET_MAC_GROUP_MASK;
+}

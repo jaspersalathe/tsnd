@@ -43,7 +43,6 @@ enum FDB_PortMapResult
 struct FDB_PortMapEntry
 {
     enum FDB_PortMapResult filter;
-    uint8_t prio; // to distinguish the queue to be used for forwarding
     uint8_t forwardUntagged; // only for static VLAN rules
 };
 
@@ -53,7 +52,8 @@ struct FDB_StaticFiltering
     enum FDB_AddressType addrType;
     uint16_t vid;
     struct FDB_PortMapEntry *portMap;
-    uint32_t portMapCnt;
+    uint8_t prio; // to distinguish the queue to be used for forwarding
+    uint32_t portMapCnt; //TODO: portMapCnt is not needed, as this should be always the number of ports...
 };
 
 struct FDB_StaticVLANRegistration
@@ -84,6 +84,7 @@ struct FDB_MACAddressRegistration
     // not allowed: AllUnregIndividual
     uint16_t vid;
     struct FDB_PortMapEntry *portMap;
+    uint8_t prio; // to distinguish the queue to be used for forwarding
     uint32_t portMapCnt;
     // Dynamic is invalid for portMap.
 };
@@ -101,6 +102,7 @@ struct FDB_DynamicReservation
     uint8_t mac[ETHERNET_MAC_LEN];
     uint16_t vid;
     struct FDB_PortMapEntry *portMap;
+    uint8_t prio; // to distinguish the queue to be used for forwarding
     uint32_t portMapCnt;
     // Dynamic is invalid for portMap.
 };

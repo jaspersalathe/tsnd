@@ -17,43 +17,20 @@
 #include <stdio.h>
 #include <errno.h>
 
-#define PORTNO_TO_PORTFLAGSIDX(portNo)  (portNo / 8)
-#define PORTNO_TO_PORTFLAGSMASK(portNo) (1 << (portNo % 8))
-
-struct vlan
-{
-    uint16_t vid;
-    uint8_t *portFlags;
-};
-
-struct macFilter
-{
-    uint8_t mac[ETHERNET_MAC_LEN];
-    uint8_t *portFlags;
-};
-
 struct macLearningEntry
 {
     uint8_t mac[ETHERNET_MAC_LEN];
-    uint32_t outPort;
+    int32_t outPort;
     struct Common_timestamp lastPacketTime;
 };
 
 struct internalState
 {
-    uint16_t *defaultVIDs;
-
-    struct vlan *vlans;
-    uint32_t vlanCnt;
-    uint32_t vlanAllocCnt;
-
-    struct macFilter *macFilters;
-    uint32_t macFilterCnt;
-    uint32_t macFilterAllocCnt;
+    struct BridgeForwarding_ruleset *ruleset;
 
     struct macLearningEntry *macLearnings;
-    uint32_t macLearningCnt;
-    uint32_t macLearningAllocCnt;
+    int32_t macLearningCnt;
+    int32_t macLearningAllocCnt;
 };
 
 const uint8_t NULL_MAC[ETHERNET_MAC_LEN] =
@@ -67,10 +44,12 @@ static struct HandlerTable_filterEntry bridgeFilter[] =
 
 static void packetHandler(const struct Packet_packet *packet, void *context);
 static void learnMACNotifier(struct BridgeForwarding_state *state, const uint8_t mac[ETHERNET_MAC_LEN], const uint32_t portIdx, const struct Common_timestamp *t);
-static int64_t findVLANbyVID(const struct BridgeForwarding_state *state, const uint16_t vid);
-static int64_t findMacFilterbyMAC(const struct BridgeForwarding_state *state, const uint8_t mac[ETHERNET_MAC_LEN]);
-static int64_t findMacLearnedbyMAC(const struct BridgeForwarding_state *state, const uint8_t mac[ETHERNET_MAC_LEN]);
-static int32_t cmpMacs(const uint8_t mac1[ETHERNET_MAC_LEN], const uint8_t mac2[ETHERNET_MAC_LEN]);
+static int32_t checkRuleset(const  struct BridgeForwarding_ruleset *r, const int32_t portCnt);
+static struct BridgeForwarding_ruleset* deepCopyRuleset(const struct BridgeForwarding_ruleset *r, const int32_t portCnt);
+static void freeRuleset(struct BridgeForwarding_ruleset *r);
+static int32_t matchLearnedMAC(const struct BridgeForwarding_state *state, const uint8_t mac[ETHERNET_MAC_LEN]);
+static int32_t matchVLAN(const struct BridgeForwarding_vlanRule *vrs, const int32_t vrsCnt, const uint16_t vid);
+static int32_t matchMacRule(const struct BridgeForwarding_macRule *mrs, const int32_t mrsCnt, const uint8_t mac[ETHERNET_MAC_LEN], const uint16_t vid);
 
 /*
  * Initialize bridge forwarding logic.
@@ -83,61 +62,72 @@ static int32_t cmpMacs(const uint8_t mac1[ETHERNET_MAC_LEN], const uint8_t mac2[
  *            -4: no ports
  *
  */
-int32_t BridgeForwarding_init(struct BridgeForwarding_state *state, struct HandlerTable_table *table, struct Port *ports, uint32_t portCnt)
+int32_t BridgeForwarding_init(struct BridgeForwarding_state *state, struct HandlerTable_table *table, struct Port *ports, const int32_t portCnt)
 {
     int32_t resu = 0;
     uint32_t i;
     struct internalState *iState = NULL;
     struct HandlerTable_tableEntry *entry = NULL;
-    uint16_t *defVIDs = NULL;
-    uint32_t *portList;
+    struct BridgeForwarding_ruleset *ruleset = NULL;
+    uint16_t *defaultVLANs;
+    struct BridgeForwarding_vlanRule *defaultVLANrule;
+    enum BridgeForwarding_action *defaultVLANrulePortActions;
+    enum BridgeForwarding_action *defaultVLANruleAllIndividualActions;
+    enum BridgeForwarding_action *defaultVLANruleAllGroupActions;
+    enum BridgeForwarding_action *defaultVLANruleAllUnregisteredIndividualActions;
+    enum BridgeForwarding_action *defaultVLANruleAllUnregisteredGroupActions;
 
     if(state == NULL || table == NULL || ports == NULL)
         return -1;
     if(portCnt < 1)
         return -4;
 
-    iState = malloc(sizeof(struct internalState));
-    defVIDs = malloc(((uint64_t)portCnt) * sizeof(uint16_t));
-    entry = malloc(sizeof(struct HandlerTable_tableEntry));
-    portList = malloc(portCnt * sizeof(uint32_t));
-    if(iState == NULL || defVIDs == NULL || entry == NULL || portList == NULL)
+    iState = calloc(1, sizeof(struct internalState));
+    entry = calloc(1, sizeof(struct HandlerTable_tableEntry));
+    ruleset = calloc(1, sizeof(struct BridgeForwarding_ruleset));
+    defaultVLANs = calloc(portCnt, sizeof(uint16_t));
+    defaultVLANrule = calloc(1, sizeof(struct BridgeForwarding_vlanRule));
+    defaultVLANrulePortActions = calloc(portCnt, sizeof(enum BridgeForwarding_action));
+    defaultVLANruleAllIndividualActions = calloc(portCnt, sizeof(enum BridgeForwarding_action));
+    defaultVLANruleAllGroupActions = calloc(portCnt, sizeof(enum BridgeForwarding_action));
+    defaultVLANruleAllUnregisteredIndividualActions = calloc(portCnt, sizeof(enum BridgeForwarding_action));
+    defaultVLANruleAllUnregisteredGroupActions = calloc(portCnt, sizeof(enum BridgeForwarding_action));
+    if(iState == NULL || entry == NULL || ruleset == NULL || defaultVLANs == NULL || defaultVLANrule == NULL || defaultVLANrulePortActions == NULL || defaultVLANruleAllIndividualActions == NULL || defaultVLANruleAllGroupActions == NULL || defaultVLANruleAllUnregisteredIndividualActions == NULL || defaultVLANruleAllUnregisteredGroupActions == NULL)
     {   resu = -3; goto fail; }
-
-    memset(iState, 0, sizeof(struct internalState));
-    memset(defVIDs, 0, ((uint64_t)portCnt) * sizeof(uint16_t));
-    memset(entry, 0, sizeof(struct HandlerTable_tableEntry));
 
     state->ports = ports;
     state->portCnt = portCnt;
     state->state = iState;
 
-    iState->vlans = NULL;
-    iState->vlanCnt = 0;
-    iState->vlanAllocCnt = 0;
+    iState->ruleset = ruleset;
+    for(i = 0; i < portCnt; i++)
+        defaultVLANs[i] = ETHERNET_VID_DEFAULT;
+    ruleset->portDefaultVLANs = defaultVLANs;
+    defaultVLANrule->vid = ETHERNET_VID_DEFAULT;
+    for(i = 0; i < portCnt; i++)
+    {
+        defaultVLANrulePortActions[i] = BridgeForwarding_action_Forward;
+        defaultVLANruleAllIndividualActions[i] = BridgeForwarding_action_Filter;
+        defaultVLANruleAllGroupActions[i] = BridgeForwarding_action_Forward;
+        defaultVLANruleAllUnregisteredIndividualActions[i] = BridgeForwarding_action_Forward;
+        defaultVLANruleAllUnregisteredGroupActions[i] = BridgeForwarding_action_Forward;
+    }
+    defaultVLANrule->portActions = defaultVLANrulePortActions;
+    defaultVLANrule->allIndividualActions = defaultVLANruleAllIndividualActions;
+    defaultVLANrule->allGroupActions = defaultVLANruleAllGroupActions;
+    defaultVLANrule->allUnregisteredIndividualActions = defaultVLANruleAllUnregisteredIndividualActions;
+    defaultVLANrule->allUnregisteredGroupActions = defaultVLANruleAllUnregisteredGroupActions;
 
-    iState->macFilters = NULL;
-    iState->macFilterCnt = 0;
-    iState->macFilterAllocCnt = 0;
+    ruleset->vlans = defaultVLANrule;
+    ruleset->vlanCnt = 1;
 
     iState->macLearnings = NULL;
     iState->macLearningCnt = 0;
     iState->macLearningAllocCnt = 0;
 
-    iState->defaultVIDs = defVIDs;
-    for(i = 0; i < portCnt; i++)
-        defVIDs[i] = BRIDGE_DEF_VID;
-
     entry->filters = bridgeFilter;
     entry->handler = &packetHandler;
     entry->context = state;
-
-    // add default VLAN
-    for(i = 0; i < portCnt; i++)
-        portList[i] = i;
-    if(BridgeForwarding_addVLAN(state, BRIDGE_DEF_VID, portList, portCnt) != 0)
-    {   resu = -3; goto fail; }
-    free(portList);
 
     if(HandlerTable_registerHandler(table, entry) != 0)
     {   resu = -2; goto fail; }
@@ -149,407 +139,322 @@ fail:
 
     if(iState != NULL)
         free(iState);
-
-    if(defVIDs != NULL)
-        free(defVIDs);
-
     if(entry != NULL)
         free(entry);
-
-    if(portList != NULL)
-        free(portList);
-
+    if(ruleset != NULL)
+        free(ruleset);
+    if(defaultVLANs != NULL)
+        free(defaultVLANs);
+    if(defaultVLANrule != NULL)
+        free(defaultVLANrule);
+    if(defaultVLANrulePortActions != NULL)
+        free(defaultVLANrulePortActions);
+    if(defaultVLANruleAllIndividualActions != NULL)
+        free(defaultVLANruleAllIndividualActions);
+    if(defaultVLANruleAllGroupActions != NULL)
+        free(defaultVLANruleAllGroupActions);
+    if(defaultVLANruleAllUnregisteredIndividualActions != NULL)
+        free(defaultVLANruleAllUnregisteredIndividualActions);
+    if(defaultVLANruleAllUnregisteredGroupActions != NULL)
+        free(defaultVLANruleAllUnregisteredGroupActions);
     return resu;
 }
 
 /*
- *
  * Return values:
  *             0: success
  *            -1: pointer NULL
- *            -2: invalid port
- *            -3: VID invalid
+ *            -2: ruleset invalid
+ *            -3: could not allocate memory
  */
-int32_t BridgeForwarding_setPortDefauldVID(struct BridgeForwarding_state *state, uint16_t vid, uint32_t portIdx)
+int32_t BridgeForwarding_updateRuleset(struct BridgeForwarding_state *state, struct BridgeForwarding_ruleset *ruleset)
 {
-    struct internalState *iState;
+    struct internalState *is;
+    int32_t resu;
+    struct BridgeForwarding_ruleset *oldRuleset, *newRuleset;
 
-    if(state == NULL || state->state == NULL)
+    if(state == NULL || state->state == NULL || ruleset == NULL)
         return -1;
 
-    iState = state->state;
+    is = state->state;
 
-    if(iState->defaultVIDs == NULL)
-        return -1;
+    resu = checkRuleset(ruleset, state->portCnt);
+    if(resu != 0)
+        return resu;
 
-    if(portIdx >= state->portCnt)
-        return -2;
-
-    if((vid & ETHERNET_VID_MASK) != vid)
+    newRuleset = deepCopyRuleset(ruleset, state->portCnt);
+    if(newRuleset == NULL)
         return -3;
 
-    iState->defaultVIDs[portIdx] = vid;
+    oldRuleset = is->ruleset;
+    is->ruleset = newRuleset;
+
+    freeRuleset(oldRuleset);
 
     return 0;
 }
 
-/*
- * Return values:
- *             0: success
- *            -1: pointer NULL
- *            -2: VLAN already exists
- *            -3: invalid port
- *            -4: VID invalid
- *            -5: could not allocate memory
- */
-int32_t BridgeForwarding_addVLAN(struct BridgeForwarding_state *state, uint16_t vid, uint32_t *portEnabled, uint32_t portEnabledCnt)
+static int isActionAllowed(enum BridgeForwarding_action a)
 {
-    struct internalState *iState;
-    uint32_t i;
+    return a == BridgeForwarding_action_Forward || a == BridgeForwarding_action_Filter || a == BridgeForwarding_action_NextStage;
+}
 
-    if(state == NULL || state->state == NULL)
+static int32_t checkRuleset(const  struct BridgeForwarding_ruleset *r, const int32_t portCnt)
+{
+    int32_t i, j;
+
+    if(r == NULL)
         return -1;
 
-    iState = state->state;
-
-    if(iState->vlanAllocCnt > 0 &&  iState->vlans == NULL)
+    if(r->portDefaultVLANs == NULL)
         return -1;
 
-    if(findVLANbyVID(state, vid) >= 0)
+    if(r->vlanCnt < 0)
         return -2;
-
-    if((vid & ETHERNET_VID_MASK) != vid)
-        return -4;
-
-    for(i = 0; i < portEnabledCnt; i++)
-        if(portEnabled[i] >= state->portCnt)
-            return -3;
-
-    if(iState->vlanCnt >= iState->vlanAllocCnt)
+    if(r->vlanCnt > 0)
     {
-        struct vlan *v_old = iState->vlans;
-        iState->vlanAllocCnt++;
-        iState->vlans = realloc(v_old, ((uint64_t)iState->vlanAllocCnt) * sizeof(struct vlan));
-        if(iState->vlans == NULL)
+        if(r->vlans == NULL)
+            return -1;
+        for(i = 0; i < r->vlanCnt; i++)
         {
-            iState->vlans = v_old;
-            iState->vlanAllocCnt--;
-            return -5;
+            if(r->vlans[i].portActions == NULL)
+                return -1;
+            if(r->vlans[i].allIndividualActions == NULL)
+                return -1;
+            if(r->vlans[i].allGroupActions == NULL)
+                return -1;
+            if(r->vlans[i].allUnregisteredIndividualActions == NULL)
+                return -1;
+            if(r->vlans[i].allUnregisteredGroupActions == NULL)
+                return -1;
+
+            for(j = 0; j < portCnt; j++)
+            {
+                if(!isActionAllowed(r->vlans[i].portActions[j]))
+                    return -2;
+                if(!isActionAllowed(r->vlans[i].allIndividualActions[j]))
+                    return -2;
+                if(!isActionAllowed(r->vlans[i].allGroupActions[j]))
+                    return -2;
+                if(!isActionAllowed(r->vlans[i].allUnregisteredIndividualActions[j]))
+                    return -2;
+                if(!isActionAllowed(r->vlans[i].allUnregisteredGroupActions[j]))
+                    return -2;
+            }
         }
     }
 
-    iState->vlans[iState->vlanCnt].vid = vid;
-    iState->vlans[iState->vlanCnt].portFlags = malloc((state->portCnt / 8) + 1); // 8 Ports fit into on byte
-    if(iState->vlans[iState->vlanCnt].portFlags == NULL)
-        return -5;
-
-    memset(iState->vlans[iState->vlanCnt].portFlags, 0, (state->portCnt / 8) + 1);
-
-    for(i = 0; i < portEnabledCnt; i++)
-    {
-        uint32_t idx = PORTNO_TO_PORTFLAGSIDX(portEnabled[i]);
-        uint8_t mask = PORTNO_TO_PORTFLAGSMASK(portEnabled[i]);
-        iState->vlans[iState->vlanCnt].portFlags[idx] |= mask;
-    }
-
-    iState->vlanCnt++;
-
-    return 0;
-}
-/*
- * Return values:
- *             0: success
- *            -1: pointer NULL
- *            -2: VLAN not found
- *            -3: invalid port
- *            -4: VID invalid
- */
-int32_t BridgeForwarding_updateVLAN(struct BridgeForwarding_state *state, uint16_t vid, uint32_t *portEnabled, uint32_t portEnabledCnt)
-{
-    struct internalState *iState;
-    int64_t i, vIdx;
-
-    if(state == NULL || state->state == NULL)
-        return -1;
-
-    iState = state->state;
-
-    if(iState->vlanAllocCnt > 0 &&  iState->vlans == NULL)
-        return -1;
-
-    if((vid & ETHERNET_VID_MASK) != vid)
-        return -4;
-
-    for(i = 0; i < portEnabledCnt; i++)
-        if(portEnabled[i] >= state->portCnt)
-            return -3;
-
-    vIdx = findVLANbyVID(state, vid);
-    if(vIdx < 0)
+    if(r->firstStageRuleCnt < 0)
         return -2;
-
-    for(i = 0; i < portEnabledCnt; i++)
+    if(r->firstStageRuleCnt > 0)
     {
-        uint32_t idx = PORTNO_TO_PORTFLAGSIDX(portEnabled[i]);
-        uint8_t mask = PORTNO_TO_PORTFLAGSMASK(portEnabled[i]);
-        iState->vlans[vIdx].portFlags[idx] |= mask;
+        if(r->firstStageRules == NULL)
+            return -1;
+
+        for(i = 0; i < r->firstStageRuleCnt; i++)
+        {
+            if(r->firstStageRules[i].mac == NULL)
+                return -1;
+            if(r->firstStageRules[i].macMask == NULL)
+                return -1;
+            if(r->firstStageRules[i].portActions == NULL)
+                return -1;
+            for(j = 0; j < portCnt; j++)
+                if(!isActionAllowed(r->firstStageRules[i].portActions[j]))
+                    return -2;
+        }
+    }
+
+    if(r->secondStageRuleCnt < 0)
+        return -2;
+    if(r->secondStageRuleCnt > 0)
+    {
+        if(r->secondStageRules == NULL)
+            return -1;
+
+        for(i = 0; i < r->secondStageRuleCnt; i++)
+        {
+            if(r->secondStageRules[i].mac == NULL)
+                return -1;
+            if(r->secondStageRules[i].macMask == NULL)
+                return -1;
+            if(r->secondStageRules[i].portActions == NULL)
+                return -1;
+            for(j = 0; j < portCnt; j++)
+                if(!isActionAllowed(r->secondStageRules[i].portActions[j]))
+                    return -2;
+        }
     }
 
     return 0;
 }
-/*
- * Return values:
- *             0: success
- *            -1: pointer NULL
- *            -2: VLAN not found
- *            -3: VID invalid
- */
-int32_t BridgeForwarding_delVLAN(struct BridgeForwarding_state *state, uint16_t vid)
+
+static struct BridgeForwarding_ruleset* deepCopyRuleset(const struct BridgeForwarding_ruleset *r, const int32_t portCnt)
 {
-    struct internalState *iState;
-    uint32_t i, j, resu;
+    // incoming rule is checked for NULL pointers and validity... so do not check here...
+    int32_t i;
+    struct BridgeForwarding_ruleset *resu = calloc(1, sizeof(struct BridgeForwarding_ruleset));
+    if(resu == NULL)
+        goto fail;
 
-    if(state == NULL || state->state == NULL)
-        return -1;
+    resu->portDefaultVLANs = calloc(portCnt, sizeof(uint16_t));
+    if(resu->portDefaultVLANs == NULL)
+        goto fail;
 
-    iState = state->state;
-
-    if(iState->vlanAllocCnt > 0 &&  iState->vlans == NULL)
-        return -1;
-
-    if((vid & ETHERNET_VID_MASK) != vid)
-        return -3;
-
-    // i is read index
-    // j is write index
-    for(i = 0, j = 0; i < iState->vlanCnt; i++, j++)
+    resu->vlanCnt = r->vlanCnt;
+    if(r->vlanCnt > 0)
     {
-        if(iState->vlans[i].vid == vid)
+        resu->vlans = calloc(r->vlanCnt, sizeof(struct BridgeForwarding_vlanRule));
+        if(resu->vlans == NULL)
+            goto fail;
+        for(i = 0; i < r->vlanCnt; i++)
         {
-            // okay, delete it (which means: don't move it forward)
-            j--;
-            free(iState->vlans[i].portFlags);
-            iState->vlans[i].portFlags = NULL;
-            iState->vlans[i].vid = 0;
-        }
-        else if(i != j)
-        {
-            // fill up gaps
-            iState->vlans[j] = iState->vlans[i];
+            resu->vlans[i].vid = r->vlans[i].vid;
+            resu->vlans[i].portActions = calloc(portCnt, sizeof(enum BridgeForwarding_action));
+            resu->vlans[i].allIndividualActions = calloc(portCnt, sizeof(enum BridgeForwarding_action));
+            resu->vlans[i].allGroupActions = calloc(portCnt, sizeof(enum BridgeForwarding_action));
+            resu->vlans[i].allUnregisteredIndividualActions = calloc(portCnt, sizeof(enum BridgeForwarding_action));
+            resu->vlans[i].allUnregisteredGroupActions = calloc(portCnt, sizeof(enum BridgeForwarding_action));
+            if(resu->vlans[i].portActions == NULL || resu->vlans[i].allIndividualActions == NULL || resu->vlans[i].allGroupActions == NULL || resu->vlans[i].allUnregisteredIndividualActions == NULL || resu->vlans[i].allUnregisteredGroupActions == NULL)
+                goto fail;
+            memcpy(resu->vlans[i].portActions, r->vlans[i].portActions, portCnt * sizeof(enum BridgeForwarding_action));
+            memcpy(resu->vlans[i].allIndividualActions, r->vlans[i].allIndividualActions, portCnt * sizeof(enum BridgeForwarding_action));
+            memcpy(resu->vlans[i].allGroupActions, r->vlans[i].allGroupActions, portCnt * sizeof(enum BridgeForwarding_action));
+            memcpy(resu->vlans[i].allUnregisteredIndividualActions, r->vlans[i].allUnregisteredIndividualActions, portCnt * sizeof(enum BridgeForwarding_action));
+            memcpy(resu->vlans[i].allUnregisteredGroupActions, r->vlans[i].allUnregisteredGroupActions, portCnt * sizeof(enum BridgeForwarding_action));
         }
     }
 
-    // check, if one was deleted
-    if(i != j)
-        resu = 0; // yes
-    else
-        resu = -2; // no
+    resu->firstStageRuleCnt = r->firstStageRuleCnt;
+    if(r->firstStageRuleCnt > 0)
+    {
+        resu->firstStageRules = calloc(r->firstStageRuleCnt, sizeof(struct BridgeForwarding_macRule));
+        if(resu->firstStageRules == NULL)
+            goto fail;
+        for(i = 0; i < r->firstStageRuleCnt; i++)
+        {
+            memcpy(resu->firstStageRules[i].mac, r->firstStageRules[i].mac, ETHERNET_MAC_LEN);
+            memcpy(resu->firstStageRules[i].macMask, r->firstStageRules[i].macMask, ETHERNET_MAC_LEN);
+            resu->firstStageRules[i].vid = r->firstStageRules[i].vid;
+            resu->firstStageRules[i].vidMask = r->firstStageRules[i].vidMask;
+            resu->firstStageRules[i].portActions = calloc(portCnt, sizeof(enum BridgeForwarding_action));
+            if(resu->firstStageRules[i].portActions == NULL)
+                goto fail;
+            memcpy(resu->firstStageRules[i].portActions, r->firstStageRules[i].portActions, portCnt * sizeof(enum BridgeForwarding_action));
+            resu->firstStageRules[i].prio = r->firstStageRules[i].prio;
+        }
+    }
 
-    iState->vlanCnt = j;
+    resu->secondStageRuleCnt = r->secondStageRuleCnt;
+    if(r->secondStageRuleCnt > 0)
+    {
+        resu->secondStageRules = calloc(r->secondStageRuleCnt, sizeof(struct BridgeForwarding_macRule));
+        if(resu->secondStageRules == NULL)
+            goto fail;
+        for(i = 0; i < r->secondStageRuleCnt; i++)
+        {
+            memcpy(resu->secondStageRules[i].mac, r->secondStageRules[i].mac, ETHERNET_MAC_LEN);
+            memcpy(resu->secondStageRules[i].macMask, r->secondStageRules[i].macMask, ETHERNET_MAC_LEN);
+            resu->secondStageRules[i].vid = r->secondStageRules[i].vid;
+            resu->secondStageRules[i].vidMask = r->secondStageRules[i].vidMask;
+            resu->secondStageRules[i].portActions = calloc(portCnt, sizeof(enum BridgeForwarding_action));
+            if(resu->secondStageRules[i].portActions == NULL)
+                goto fail;
+            memcpy(resu->secondStageRules[i].portActions, r->secondStageRules[i].portActions, portCnt * sizeof(enum BridgeForwarding_action));
+            resu->secondStageRules[i].prio = r->secondStageRules[i].prio;
+        }
+    }
 
     return resu;
+
+fail:
+    freeRuleset(resu);
+    return NULL;
 }
 
-/*
- * Return values:
- *             0: success
- *            -1: pointer NULL
- */
-int32_t BridgeForwarding_delAllVLAN(struct BridgeForwarding_state *state)
+static void freeRuleset(struct BridgeForwarding_ruleset *r)
 {
-    struct internalState *iState;
-    uint32_t i, cnt;
+    int32_t i;
 
-    if(state == NULL || state->state == NULL)
-        return -1;
+    if(r == NULL)
+        return;
 
-    iState = state->state;
+    if(r->portDefaultVLANs)
+        free(r->portDefaultVLANs);
 
-    cnt = iState->vlanCnt;
-    iState->vlanCnt = 0;
-
-    for(i = 0; i < cnt; i++)
-        free(iState->vlans[i].portFlags);
-
-    return 0;
-}
-
-/*
- * Return values:
- *             0: success
- *            -1: pointer NULL
- *            -2: entry already exists
- *            -3: invalid port
- *            -4: could not allocate memory
- */
-int32_t BridgeForwarding_addDstMACFilter(struct BridgeForwarding_state *state, uint8_t dstMac[6], uint32_t *portEnabled, uint32_t *portQueuesEnabled, uint32_t portEnabledCnt)
-{
-    // TODO: portQueues
-    struct internalState *iState;
-    uint32_t i;
-
-    if(state == NULL || state->state == NULL)
-        return -1;
-
-    iState = state->state;
-
-    if(iState->macFilterCnt > 0 &&  iState->macFilters == NULL)
-        return -1;
-
-    for(i = 0; i < portEnabledCnt; i++)
-        if(portEnabled[i] >= state->portCnt)
-            return -3;
-
-    if(findMacFilterbyMAC(state, dstMac) >= 0)
-        return -2;
-
-    if(iState->macFilterCnt >= iState->macFilterAllocCnt)
+    if(r->vlanCnt > 0 && r->vlans != NULL)
     {
-        struct macFilter *mf_old = iState->macFilters;
-        iState->macFilterAllocCnt++;
-        iState->macFilters = realloc(mf_old, ((uint64_t)iState->macFilterAllocCnt) * sizeof(struct macFilter));
-        if(iState->macFilters == NULL)
+        for(i = 0; i < r->vlanCnt; i++)
         {
-            iState->macFilters = mf_old;
-            iState->macFilterAllocCnt--;
-            return -4;
+            if(r->vlans[i].portActions != NULL)
+                free(r->vlans[i].portActions);
+            if(r->vlans[i].allIndividualActions != NULL)
+                free(r->vlans[i].allIndividualActions);
+            if(r->vlans[i].allGroupActions != NULL)
+                free(r->vlans[i].allGroupActions);
+            if(r->vlans[i].allUnregisteredIndividualActions != NULL)
+                free(r->vlans[i].allUnregisteredIndividualActions);
+            if(r->vlans[i].allUnregisteredGroupActions != NULL)
+                free(r->vlans[i].allUnregisteredGroupActions);
         }
+        free(r->vlans);
     }
 
-    memcpy(iState->macFilters[iState->macFilterCnt].mac, dstMac, ETHERNET_MAC_LEN);
-    iState->macFilters[iState->macFilterCnt].portFlags = malloc((state->portCnt / 8) + 1); // 8 Ports fit into on byte
-    if(iState->macFilters[iState->macFilterCnt].portFlags == NULL)
-        return -4;
-
-    memset(iState->macFilters[iState->macFilterCnt].portFlags, 0, (state->portCnt / 8) + 1);
-
-    for(i = 0; i < portEnabledCnt; i++)
+    if(r->firstStageRuleCnt > 0 && r->firstStageRules != NULL)
     {
-        uint32_t idx = PORTNO_TO_PORTFLAGSIDX(portEnabled[i]);
-        uint8_t mask = PORTNO_TO_PORTFLAGSMASK(portEnabled[i]);
-        iState->macFilters[iState->macFilterCnt].portFlags[idx] |= mask;
+        for(i = 0; i < r->firstStageRuleCnt; i++)
+            if(r->firstStageRules[i].portActions != NULL)
+                free(r->firstStageRules[i].portActions);
+        free(r->firstStageRules);
     }
 
-    iState->macFilterCnt++;
-
-    return 0;
-}
-/*
- * Return values:
- *             0: success
- *            -1: pointer NULL
- *            -2: entry not found
- *            -3: invalid port
- */
-int32_t BridgeForwarding_updateDstMACFilter(struct BridgeForwarding_state *state, uint8_t dstMac[6], uint32_t *portEnabled, uint32_t *portQueuesEnabled, uint32_t portEnabledCnt)
-{
-    // TODO: portQueues
-    struct internalState *iState;
-    int64_t i, mfIdx;
-
-    if(state == NULL || state->state == NULL)
-        return -1;
-
-    iState = state->state;
-
-    if(iState->macFilterCnt > 0 &&  iState->macFilters == NULL)
-        return -1;
-
-    for(i = 0; i < portEnabledCnt; i++)
-        if(portEnabled[i] >= state->portCnt)
-            return -3;
-
-    mfIdx = findMacFilterbyMAC(state, dstMac);
-    if(mfIdx < 0)
-        return -2;
-
-    for(i = 0; i < portEnabledCnt; i++)
+    if(r->secondStageRuleCnt > 0 && r->secondStageRules != NULL)
     {
-        uint32_t idx = PORTNO_TO_PORTFLAGSIDX(portEnabled[i]);
-        uint8_t mask = PORTNO_TO_PORTFLAGSMASK(portEnabled[i]);
-        iState->macFilters[mfIdx].portFlags[idx] |= mask;
+        for(i = 0; i < r->secondStageRuleCnt; i++)
+            if(r->secondStageRules[i].portActions != NULL)
+                free(r->secondStageRules[i].portActions);
+        free(r->secondStageRules);
     }
 
-    return 0;
-}
-/*
- * Return values:
- *             0: success
- *            -1: pointer NULL
- *            -2: entry not found
- */
-int32_t BridgeForwarding_delDstMACFilter(struct BridgeForwarding_state *state, uint8_t dstMac[6])
-{
-    // TODO: portQueues
-    struct internalState *iState;
-    uint32_t i, j, resu;
-
-    if(state == NULL || state->state == NULL)
-        return -1;
-
-    iState = state->state;
-
-    if(iState->macFilterAllocCnt > 0 &&  iState->macFilters == NULL)
-        return -1;
-
-    // i is read index
-    // j is write index
-    for(i = 0, j = 0; i < iState->macFilterCnt; i++, j++)
-    {
-        if(cmpMacs(iState->macFilters[i].mac, dstMac) == 0)
-        {
-            // okay, delete it (which means: don't move it forward)
-            j--;
-            free(iState->macFilters[i].portFlags);
-            iState->macFilters[i].portFlags = NULL;
-            memset(iState->macFilters[i].mac, 0, ETHERNET_MAC_LEN);
-        }
-        else if(i != j)
-        {
-            // fill up gaps
-            iState->macFilters[j] = iState->macFilters[i];
-        }
-    }
-
-    // check, if one was deleted
-    if(i != j)
-        resu = 0; // yes
-    else
-        resu = -2; // no
-
-    iState->macFilterCnt = j;
-
-    return resu;
+    free(r);
 }
 
 
 static void packetHandler(const struct Packet_packet *p, void *context)
 {
-    struct BridgeForwarding_state *s;
+    struct BridgeForwarding_state *st;
     struct internalState *is;
+    struct BridgeForwarding_ruleset *rs;
     uint16_t vid;
-    uint8_t *portsEnabled;
-    int64_t vIdx, mfIdx, mlIdx;
-    struct vlan *v = NULL;
-    struct macFilter *f = NULL;
-    struct macLearningEntry *l = NULL;
     struct Ethernet_headerVLAN *ethHdr;
-    uint32_t i, idx, mask;
     struct Packet_packet pOut, pOutV;
-    int wasTagged;
+    int wasTagged, isGroupMac;
+    int32_t i, vIdx, fIdx, sIdx, *portForwarded;
+    struct BridgeForwarding_vlanRule *v = NULL;
+    struct BridgeForwarding_macRule *f = NULL, *s = NULL;
 
     if(context == NULL || p == NULL)
         return;
 
-    s = context;
-    if(s->state == NULL || s->ports == NULL || s->portCnt == 0)
+    st = context;
+    if(st->state == NULL || st->ports == NULL || st->portCnt == 0)
         return;
 
-    is = s->state;
-    if(is->defaultVIDs == NULL || (is->macFilterCnt > 0 && is->macFilters == NULL) || (is->vlanCnt > 0 && is->vlans == NULL) || (is->macLearningCnt > 0 && is->macLearnings == NULL))
+    is = st->state;
+    if(is->ruleset == NULL || (is->macLearningCnt > 0 && is->macLearnings == NULL))
         return;
 
+    rs = is->ruleset;
+    if(rs->portDefaultVLANs == NULL || (rs->vlanCnt > 0 && rs->vlans == NULL) || (rs->firstStageRuleCnt > 0 && rs->firstStageRules == NULL) || (rs->secondStageRuleCnt > 0 && rs->secondStageRules == NULL))
+        return;
+
+    if(p->port >= st->portCnt)
+        return;
     if(p->len < sizeof(struct Ethernet_headerVLAN))
+        return;
+
+    portForwarded = calloc(st->portCnt, sizeof(int32_t));
+    if(portForwarded == NULL)
         return;
 
     ethHdr = (struct Ethernet_headerVLAN*)p->packet;
@@ -561,39 +466,25 @@ static void packetHandler(const struct Packet_packet *p, void *context)
     }
     else
     {
-        vid = is->defaultVIDs[p->port];
+        vid = rs->portDefaultVLANs[p->port];
         wasTagged = 0;
     }
 
-    portsEnabled = malloc((s->portCnt / 8) + 1);
-    if(portsEnabled == NULL)
-        return;
-    memset(portsEnabled, 0, (s->portCnt / 8) + 1);
-
-    vIdx = findVLANbyVID(s, vid);
-    mfIdx = findMacFilterbyMAC(s, ethHdr->dst);
-    mlIdx = findMacLearnedbyMAC(s, ethHdr->dst);
-
-    memset(&pOut, 0, sizeof(pOut));
-    memset(&pOutV, 0, sizeof(pOutV));
-
-    fprintf(stdout, ">> %02X:%02X:%02X:%02X:%02X:%02X (%u): %u [%c:%u] -> ", ethHdr->dst[0], ethHdr->dst[1], ethHdr->dst[2], ethHdr->dst[3], ethHdr->dst[4], ethHdr->dst[5], p->len, p->port, wasTagged ? 't' : 'u', vid);
+    vIdx = matchVLAN(rs->vlans, rs->vlanCnt, vid);
+    fIdx = matchMacRule(rs->firstStageRules, rs->firstStageRuleCnt, ethHdr->dst, vid);
+    sIdx = matchMacRule(rs->secondStageRules, rs->secondStageRuleCnt, ethHdr->dst, vid);
 
     if(vIdx < 0)
         goto noForwarding;
+    v = &(rs->vlans[vIdx]);
 
-    idx = PORTNO_TO_PORTFLAGSIDX(p->port);
-    mask = PORTNO_TO_PORTFLAGSMASK(p->port);
+    if(fIdx >= 0)
+        f = &(rs->firstStageRules[fIdx]);
 
-    v = &(is->vlans[vIdx]);
+    if(sIdx >= 0)
+        s = &(rs->secondStageRules[sIdx]);
 
-    if((v->portFlags[idx] & mask ) == 0)
-        goto noForwarding; // this vid is not active on this port
-
-    if(mfIdx >= 0)
-        f = &(is->macFilters[mfIdx]);
-    if(mlIdx >= 0)
-        l = &(is->macLearnings[mlIdx]);
+    isGroupMac = Ethernet_isGroupMac(ethHdr.dst);
 
     if(wasTagged)
     {
@@ -601,7 +492,7 @@ static void packetHandler(const struct Packet_packet *p, void *context)
         pOutV.len = p->len;
         // initialize untagged packet format
         pOut.len = p->len - 4;
-        pOut.packet = malloc(pOut.len);
+        pOut.packet = calloc(1, pOut.len);
         if(pOut.packet == NULL)
             goto fail;
         memcpy(&(pOut.packet[ 0]), &(p->packet[ 0]),          12); // copy macs
@@ -613,7 +504,7 @@ static void packetHandler(const struct Packet_packet *p, void *context)
         pOut.len = p->len;
         // initialize tagged packet format
         pOutV.len = p->len + 4;
-        pOutV.packet = malloc(pOutV.len);
+        pOutV.packet = calloc(1, pOutV.len);
         if(pOutV.packet == NULL)
             goto fail;
         memcpy(&(pOutV.packet[ 0]), &(p->packet[ 0]),          12); // copy macs
@@ -622,61 +513,47 @@ static void packetHandler(const struct Packet_packet *p, void *context)
         pOutV.packet[14] = 0xFF & (vid >> 8); // tci
         pOutV.packet[15] = 0xFF & vid;
         memcpy(&(pOutV.packet[16]), &(p->packet[12]), p->len - 12); // copy type and payload
-
     }
 
-    for(i = 0; i < s->portCnt; i++)
+    for(i = 0; i < st->portCnt; i++)
     {
         struct Packet_packet *toSend;
 
-        idx = PORTNO_TO_PORTFLAGSIDX(i);
-        mask = PORTNO_TO_PORTFLAGSMASK(i);
+        if(v->portActions[i] != BridgeForwarding_action_Forward)
+            continue;
 
-        if((v->portFlags[idx] & mask) == 0)
-            continue; // port is not in vlan
-        if(f != NULL)
-            if((f->portFlags[idx] & mask) == 0)
-                continue; // this port is filtered by rule
-        if(l != NULL)
-            if((l->outPort != i) && f == NULL)
-                continue; // no filtering rule and this is not the known port for target host
-        if(l == NULL && f == NULL)
-            if(i == p->port)
-                continue; // do not broadcast packet to sender (if there is no rule saying anything else)
 
         // okay, if we are here, then the packet is supposed to be sent on this port
 
         // determine, if it is to be sent tagged or untagged
-        if(vid == is->defaultVIDs[i])
+        if(vid == rs->portDefaultVLANs[i])
             toSend = &pOut;
         else
             toSend = &pOutV;
 
-        if(Port_send(&(s->ports[i]), toSend))
+        if(Port_send(&(st->ports[i]), toSend))
             fprintf(stdout, "<%d,%s>", errno, strerror(errno));
-        portsEnabled[idx] |= mask;
+        portForwarded[i] = 1;
         // TODO: analyze outgoing timestamps ...
     }
 
-noForwarding:
 fail:
-
-    for(i = 0; i < s->portCnt; i++)
-        fprintf(stdout, "%s", (portsEnabled[PORTNO_TO_PORTFLAGSIDX(i)] & PORTNO_TO_PORTFLAGSMASK(i)) ? "1" : "0");
+noForwarding:
+    for(i = 0; i < st->portCnt; i++)
+        fprintf(stdout, "%d", (portForwarded[i]));
     fputs("\n", stdout);
 
     if(wasTagged && pOut.packet != NULL)
         free(pOut.packet);
     if(!wasTagged && pOutV.packet != NULL)
         free(pOutV.packet);
-    free(portsEnabled);
-
-    learnMACNotifier(s, ethHdr->src, p->port, &(p->t));
+    free(portForwarded);
+    learnMACNotifier(st, ethHdr->src, p->port, &(p->t));
 }
 
 static void learnMACNotifier(struct BridgeForwarding_state *state, const uint8_t mac[ETHERNET_MAC_LEN], const uint32_t portIdx, const struct Common_timestamp *t)
 {
-    int64_t idx = findMacLearnedbyMAC(state, mac);
+    int32_t idx = matchLearnedMAC(state, mac);
     struct internalState *is = state->state;
 
     if(idx < 0)
@@ -705,63 +582,191 @@ static void learnMACNotifier(struct BridgeForwarding_state *state, const uint8_t
     is->macLearnings[idx].lastPacketTime = *t;
 }
 
-static int64_t findVLANbyVID(const struct BridgeForwarding_state *state, const uint16_t vid)
+// Old stuff:
+//
+//static void packetHandler(const struct Packet_packet *p, void *context)
+//{
+//    struct BridgeForwarding_state *s;
+//    struct internalState *is;
+//    uint16_t vid;
+//    uint8_t *portsEnabled;
+//    int64_t vIdx, mfIdx, mlIdx;
+//    struct vlan *v = NULL;
+//    struct macFilter *f = NULL;
+//    struct macLearningEntry *l = NULL;
+//    struct Ethernet_headerVLAN *ethHdr;
+//    uint32_t i, idx, mask;
+//    struct Packet_packet pOut, pOutV;
+//    int wasTagged;
+//
+//    if(context == NULL || p == NULL)
+//        return;
+//
+//    s = context;
+//    if(s->state == NULL || s->ports == NULL || s->portCnt == 0)
+//        return;
+//
+//    is = s->state;
+//    if(is->defaultVIDs == NULL || (is->macFilterCnt > 0 && is->macFilters == NULL) || (is->vlanCnt > 0 && is->vlans == NULL) || (is->macLearningCnt > 0 && is->macLearnings == NULL))
+//        return;
+//
+//    if(p->len < sizeof(struct Ethernet_headerVLAN))
+//        return;
+//
+//    ethHdr = (struct Ethernet_headerVLAN*)p->packet;
+//
+//    if(Ethernet_isPacketVLAN(p->packet, p->len))
+//    {
+//        vid = Common_nToLu16( *( (uint16_t*)(ethHdr->tci) ) ) & ETHERNET_VID_MASK;
+//        wasTagged = 1;
+//    }
+//    else
+//    {
+//        vid = is->defaultVIDs[p->port];
+//        wasTagged = 0;
+//    }
+//
+//    portsEnabled = malloc((s->portCnt / 8) + 1);
+//    if(portsEnabled == NULL)
+//        return;
+//    memset(portsEnabled, 0, (s->portCnt / 8) + 1);
+//
+//    vIdx = findVLANbyVID(s, vid);
+//    mfIdx = findMacFilterbyMAC(s, ethHdr->dst);
+//    mlIdx = findMacLearnedbyMAC(s, ethHdr->dst);
+//
+//    memset(&pOut, 0, sizeof(pOut));
+//    memset(&pOutV, 0, sizeof(pOutV));
+//
+//    fprintf(stdout, ">> %02X:%02X:%02X:%02X:%02X:%02X (%u): %u [%c:%u] -> ", ethHdr->dst[0], ethHdr->dst[1], ethHdr->dst[2], ethHdr->dst[3], ethHdr->dst[4], ethHdr->dst[5], p->len, p->port, wasTagged ? 't' : 'u', vid);
+//
+//    if(vIdx < 0)
+//        goto noForwarding;
+//
+//    idx = PORTNO_TO_PORTFLAGSIDX(p->port);
+//    mask = PORTNO_TO_PORTFLAGSMASK(p->port);
+//
+//    v = &(is->vlans[vIdx]);
+//
+//    if((v->portFlags[idx] & mask ) == 0)
+//        goto noForwarding; // this vid is not active on this port
+//
+//    if(mfIdx >= 0)
+//        f = &(is->macFilters[mfIdx]);
+//    if(mlIdx >= 0)
+//        l = &(is->macLearnings[mlIdx]);
+//
+//    if(wasTagged)
+//    {
+//        pOutV.packet = p->packet;
+//        pOutV.len = p->len;
+//        // initialize untagged packet format
+//        pOut.len = p->len - 4;
+//        pOut.packet = malloc(pOut.len);
+//        if(pOut.packet == NULL)
+//            goto fail;
+//        memcpy(&(pOut.packet[ 0]), &(p->packet[ 0]),          12); // copy macs
+//        memcpy(&(pOut.packet[12]), &(p->packet[16]), p->len - 16); // copy type and payload
+//    }
+//    else
+//    {
+//        pOut.packet = p->packet;
+//        pOut.len = p->len;
+//        // initialize tagged packet format
+//        pOutV.len = p->len + 4;
+//        pOutV.packet = malloc(pOutV.len);
+//        if(pOutV.packet == NULL)
+//            goto fail;
+//        memcpy(&(pOutV.packet[ 0]), &(p->packet[ 0]),          12); // copy macs
+//        pOutV.packet[12] = ETHERNET_TYPE_VLAN[0]; // 802.1Q Tag type
+//        pOutV.packet[13] = ETHERNET_TYPE_VLAN[1];
+//        pOutV.packet[14] = 0xFF & (vid >> 8); // tci
+//        pOutV.packet[15] = 0xFF & vid;
+//        memcpy(&(pOutV.packet[16]), &(p->packet[12]), p->len - 12); // copy type and payload
+//
+//    }
+//
+//    for(i = 0; i < s->portCnt; i++)
+//    {
+//        struct Packet_packet *toSend;
+//
+//        idx = PORTNO_TO_PORTFLAGSIDX(i);
+//        mask = PORTNO_TO_PORTFLAGSMASK(i);
+//
+//        if((v->portFlags[idx] & mask) == 0)
+//            continue; // port is not in vlan
+//        if(f != NULL)
+//            if((f->portFlags[idx] & mask) == 0)
+//                continue; // this port is filtered by rule
+//        if(l != NULL)
+//            if((l->outPort != i) && f == NULL)
+//                continue; // no filtering rule and this is not the known port for target host
+//        if(l == NULL && f == NULL)
+//            if(i == p->port)
+//                continue; // do not broadcast packet to sender (if there is no rule saying anything else)
+//
+//        // okay, if we are here, then the packet is supposed to be sent on this port
+//
+//        // determine, if it is to be sent tagged or untagged
+//        if(vid == is->defaultVIDs[i])
+//            toSend = &pOut;
+//        else
+//            toSend = &pOutV;
+//
+//        if(Port_send(&(s->ports[i]), toSend))
+//            fprintf(stdout, "<%d,%s>", errno, strerror(errno));
+//        portsEnabled[idx] |= mask;
+//        // TODO: analyze outgoing timestamps ...
+//    }
+//
+//noForwarding:
+//fail:
+//
+//    for(i = 0; i < s->portCnt; i++)
+//        fprintf(stdout, "%s", (portsEnabled[PORTNO_TO_PORTFLAGSIDX(i)] & PORTNO_TO_PORTFLAGSMASK(i)) ? "1" : "0");
+//    fputs("\n", stdout);
+//
+//    if(wasTagged && pOut.packet != NULL)
+//        free(pOut.packet);
+//    if(!wasTagged && pOutV.packet != NULL)
+//        free(pOutV.packet);
+//    free(portsEnabled);
+//
+//    learnMACNotifier(s, ethHdr->src, p->port, &(p->t));
+//}
+
+static int32_t matchVLAN(const struct BridgeForwarding_vlanRule *vrs, const int32_t vrsCnt, const uint16_t vid)
 {
-    struct internalState *iState;
-    uint32_t i;
+    int32_t i;
 
-    iState = state->state;
-
-    for(i = 0; i < iState->vlanCnt; i++)
-        if(iState->vlans[i].vid == vid)
+    for(i = 0; i < vrsCnt; i++)
+        if(vrs[i].vid == (vid & ETHERNET_VID_MASK))
             return i;
     return -1;
 }
 
-static int64_t findMacFilterbyMAC(const struct BridgeForwarding_state *state, const uint8_t mac[ETHERNET_MAC_LEN])
+static int32_t matchMacRule(const struct BridgeForwarding_macRule *mrs, const int32_t mrsCnt, const uint8_t mac[ETHERNET_MAC_LEN], const uint16_t vid)
 {
-    struct internalState *iState;
-    uint32_t i;
+    int32_t i;
 
-    iState = state->state;
-
-    for(i = 0; i < iState->macFilterCnt; i++)
-        if(cmpMacs(iState->macFilters[i].mac, mac) == 0)
+    for(i = 0; i < mrsCnt; i++)
+        if(Ethernet_cmpMacsMasked(mac, mrs[i].mac, mrs[i].macMask) == 0 && (vid & mrs[i].vidMask) == (mrs[i].vid & mrs[i].vidMask))
             return i;
 
     return -1;
 }
 
 
-static int64_t findMacLearnedbyMAC(const struct BridgeForwarding_state *state, const uint8_t mac[ETHERNET_MAC_LEN])
+static int32_t matchLearnedMAC(const struct BridgeForwarding_state *state, const uint8_t mac[ETHERNET_MAC_LEN])
 {
     struct internalState *iState;
-    uint32_t i;
+    int32_t i;
 
     iState = state->state;
 
     for(i = 0; i < iState->macLearningCnt; i++)
-        if(cmpMacs(iState->macLearnings[i].mac, mac) == 0)
+        if(Ethernet_cmpMacs(iState->macLearnings[i].mac, mac) == 0)
             return i;
 
     return -1;
-}
-
-/*
- * Return values:
- *             1: mac2 is larger
- *             0: equal
- *            -1: mac1 is larger
- */
-static int32_t cmpMacs(const uint8_t mac1[ETHERNET_MAC_LEN], const uint8_t mac2[ETHERNET_MAC_LEN])
-{
-    uint32_t i;
-    for(i = 0; i < ETHERNET_MAC_LEN; i++)
-    {
-        if(mac2[i] > mac1[i])
-            return 1;
-        else if(mac1[i] > mac2[i])
-            return -1;
-    }
-    return 0;
 }

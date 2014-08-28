@@ -8,6 +8,4 @@
 #ifndef BRIDGE_H_
 #define BRIDGE_H_
 
-#define BRIDGE_DEF_VID (0x01)
-
 #endif /* BRIDGE_H_ */
