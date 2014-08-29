@@ -53,14 +53,12 @@ struct FDB_StaticFiltering
     uint16_t vid;
     struct FDB_PortMapEntry *portMap;
     uint8_t prio; // to distinguish the queue to be used for forwarding
-    uint32_t portMapCnt; //TODO: portMapCnt is not needed, as this should be always the number of ports...
 };
 
 struct FDB_StaticVLANRegistration
 {
     uint16_t vid;
     struct FDB_PortMapEntry *portMap;
-    uint32_t portMapCnt;
     /*
      * Following mapping for portMap:
      *  - Filter <-> Forbidden
@@ -85,7 +83,6 @@ struct FDB_MACAddressRegistration
     uint16_t vid;
     struct FDB_PortMapEntry *portMap;
     uint8_t prio; // to distinguish the queue to be used for forwarding
-    uint32_t portMapCnt;
     // Dynamic is invalid for portMap.
 };
 
@@ -93,7 +90,6 @@ struct FDB_DynamicVLANRegistration
 {
     uint16_t vid;
     struct FDB_PortMapEntry *portMap;
-    uint32_t portMapCnt;
     // Dynamic is invalid for portMap.
 };
 
@@ -103,7 +99,6 @@ struct FDB_DynamicReservation
     uint16_t vid;
     struct FDB_PortMapEntry *portMap;
     uint8_t prio; // to distinguish the queue to be used for forwarding
-    uint32_t portMapCnt;
     // Dynamic is invalid for portMap.
 };
 

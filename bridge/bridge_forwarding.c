@@ -429,9 +429,10 @@ static void packetHandler(const struct Packet_packet *p, void *context)
     struct Ethernet_headerVLAN *ethHdr;
     struct Packet_packet pOut, pOutV;
     int wasTagged, isGroupMac;
-    int32_t i, vIdx, fIdx, sIdx, *portForwarded;
+    int32_t i, vIdx, fIdx, sIdx, lIdx, *portForwarded;
     struct BridgeForwarding_vlanRule *v = NULL;
     struct BridgeForwarding_macRule *f = NULL, *s = NULL;
+    struct macLearningEntry *l = NULL;
 
     if(context == NULL || p == NULL)
         return;
@@ -473,6 +474,7 @@ static void packetHandler(const struct Packet_packet *p, void *context)
     vIdx = matchVLAN(rs->vlans, rs->vlanCnt, vid);
     fIdx = matchMacRule(rs->firstStageRules, rs->firstStageRuleCnt, ethHdr->dst, vid);
     sIdx = matchMacRule(rs->secondStageRules, rs->secondStageRuleCnt, ethHdr->dst, vid);
+    lIdx = matchLearnedMAC(st, ethHdr->dst);
 
     if(vIdx < 0)
         goto noForwarding;
@@ -484,7 +486,10 @@ static void packetHandler(const struct Packet_packet *p, void *context)
     if(sIdx >= 0)
         s = &(rs->secondStageRules[sIdx]);
 
-    isGroupMac = Ethernet_isGroupMac(ethHdr.dst);
+    if(lIdx >= 0)
+        l = &(is->macLearnings[lIdx]);
+
+    isGroupMac = Ethernet_isGroupMac(ethHdr->dst);
 
     if(wasTagged)
     {
@@ -519,8 +524,38 @@ static void packetHandler(const struct Packet_packet *p, void *context)
     {
         struct Packet_packet *toSend;
 
-        if(v->portActions[i] != BridgeForwarding_action_Forward)
-            continue;
+        if(v->portActions[i] == BridgeForwarding_action_Filter)
+        {   continue; }
+        else if(isGroupMac && v->allGroupActions[i] == BridgeForwarding_action_Filter)
+        {   continue; }
+        else if(isGroupMac && v->allGroupActions[i] == BridgeForwarding_action_Forward)
+        {   /* ... forward */ }
+        else if(!isGroupMac && v->allIndividualActions[i] == BridgeForwarding_action_Filter)
+        {   continue; }
+        else if(!isGroupMac && v->allIndividualActions[i] == BridgeForwarding_action_Forward)
+        {   /* ... forward */ }
+        else if(f != NULL && f->portActions[i] == BridgeForwarding_action_Filter)
+        {   continue; }
+        else if(f != NULL && f->portActions[i] == BridgeForwarding_action_Forward)
+        {   /* ... forward */ }
+        else if(isGroupMac && v->allUnregisteredGroupActions[i] == BridgeForwarding_action_Filter)
+        {   continue; }
+        else if(isGroupMac && v->allUnregisteredGroupActions[i] == BridgeForwarding_action_Forward)
+        {   /* ... forward */ }
+        else if(!isGroupMac && v->allUnregisteredIndividualActions[i] == BridgeForwarding_action_Filter)
+        {   continue; }
+        else if(!isGroupMac && v->allUnregisteredIndividualActions[i] == BridgeForwarding_action_Forward)
+        {   /* ... forward */ }
+        else if(s != NULL && s->portActions[i] == BridgeForwarding_action_Filter)
+        {   continue; }
+        else if(s != NULL && s->portActions[i] == BridgeForwarding_action_Forward)
+        {   /* ... forward */ }
+        else if(l != NULL && l->outPort == i)
+        {   /* ... forward */ }
+        else if(l != NULL && l->outPort != i)
+        {   continue; }
+        else
+        {   /* ... forward */ }
 
 
         // okay, if we are here, then the packet is supposed to be sent on this port

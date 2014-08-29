@@ -11,9 +11,9 @@
 #include <string.h>
 
 
-static int32_t cmpRules(const struct FDB_rule *r1, const struct FDB_rule *r2);
+static int32_t cmpRules(const struct FDB_rule *r1, const struct FDB_rule *r2, const int32_t portCnt);
 static void freeRuleInternalMemory(struct FDB_rule *r);
-static int32_t copyRuleAllocInternalMemory(struct FDB_rule *to, const struct FDB_rule *from);
+static int32_t copyRuleAllocInternalMemory(struct FDB_rule *to, const struct FDB_rule *from, const int32_t portCnt);
 static int32_t updateBridgeForwarding(const struct FDB_state *s);
 static int32_t checkRule(const struct FDB_rule *r);
 static int32_t checkRuleConfilct(const struct FDB_rule *r);
@@ -72,7 +72,7 @@ int32_t FDB_addRule(struct FDB_state *state, struct FDB_rule *rule)
         }
     }
 
-    resu = copyRuleAllocInternalMemory(&(state->rules[state->ruleCnt]), rule);
+    resu = copyRuleAllocInternalMemory(&(state->rules[state->ruleCnt]), rule, state->portCnt);
     if(resu != 0)
         return resu;
 
@@ -99,7 +99,7 @@ int32_t FDB_delRule(struct FDB_state *state, struct FDB_rule *rule)
 
     for(i = 0, j = 0; i < state->ruleCnt; i++)
     {
-        if(cmpRules(rule, &(state->rules[i])))
+        if(cmpRules(rule, &(state->rules[i]), state->portCnt))
         {
             found = 1;
             // del rule by not incrementing write slot and not moving it forward
@@ -136,7 +136,7 @@ struct FDB_rule *FDB_getRuleByIdx(struct FDB_state *state, uint32_t idx)
     return &(state->rules[idx]);
 }
 
-static int32_t cmpRules(const struct FDB_rule *r1, const struct FDB_rule *r2)
+static int32_t cmpRules(const struct FDB_rule *r1, const struct FDB_rule *r2, const int32_t portCnt)
 {
     uint32_t i;
     const struct FDB_StaticFiltering *sf1, *sf2;
@@ -163,12 +163,11 @@ static int32_t cmpRules(const struct FDB_rule *r1, const struct FDB_rule *r2)
         for(i = 0; i < ETHERNET_MAC_LEN; i++)
             if(sf1->mac[i] != sf2->mac[i])
                 return 0;
-        if(sf1->portMapCnt != sf2->portMapCnt)
+        if(sf1->prio != sf2->prio)
             return 0;
         if(sf1->portMap != sf2->portMap)
-            for(i = 0; i < sf1->portMapCnt; i++)
-                if(   sf1->portMap[i].filter != sf2->portMap[i].filter
-                   || sf1->portMap[i].prio != sf2->portMap[i].prio)
+            for(i = 0; i < portCnt; i++)
+                if(sf1->portMap[i].filter != sf2->portMap[i].filter)
                     return 0;
         return 1;
 
@@ -177,12 +176,9 @@ static int32_t cmpRules(const struct FDB_rule *r1, const struct FDB_rule *r2)
         sv2 = &(r2->rule.staticVLANRegistration);
         if(sv1->vid != sv2->vid)
             return 0;
-        if(sv1->portMapCnt != sv2->portMapCnt)
-            return 0;
         if(sv1->portMap != sv2->portMap)
-            for(i = 0; i < sv1->portMapCnt; i++)
+            for(i = 0; i < portCnt; i++)
                 if(   sv1->portMap[i].filter != sv2->portMap[i].filter
-                   || sv1->portMap[i].prio != sv2->portMap[i].prio
                    || sv1->portMap[i].forwardUntagged != sv2->portMap[i].forwardUntagged)
                     return 0;
         return 1;
@@ -210,12 +206,11 @@ static int32_t cmpRules(const struct FDB_rule *r1, const struct FDB_rule *r2)
             return 0;
         if(ma1->vid != ma2->vid)
             return 0;
-        if(ma1->portMapCnt != ma2->portMapCnt)
+        if(ma1->prio != ma2->prio)
             return 0;
         if(ma1->portMap != ma2->portMap)
-            for(i = 0; i < ma1->portMapCnt; i++)
-                if(   ma1->portMap[i].filter != ma2->portMap[i].filter
-                   || ma1->portMap[i].prio != ma2->portMap[i].prio)
+            for(i = 0; i < portCnt; i++)
+                if(ma1->portMap[i].filter != ma2->portMap[i].filter)
                     return 0;
         return 1;
 
@@ -224,12 +219,9 @@ static int32_t cmpRules(const struct FDB_rule *r1, const struct FDB_rule *r2)
         dv2 = &(r2->rule.dynamicVLANRegistration);
         if(dv1->vid != dv2->vid)
             return 0;
-        if(dv1->portMapCnt != dv2->portMapCnt)
-            return 0;
         if(dv1->portMap != dv2->portMap)
-            for(i = 0; i < dv1->portMapCnt; i++)
-                if(   dv1->portMap[i].filter != dv2->portMap[i].filter
-                   || dv1->portMap[i].prio != dv2->portMap[i].prio)
+            for(i = 0; i < portCnt; i++)
+                if(dv1->portMap[i].filter != dv2->portMap[i].filter)
                     return 0;
         return 1;
 
@@ -241,12 +233,11 @@ static int32_t cmpRules(const struct FDB_rule *r1, const struct FDB_rule *r2)
                 return 0;
         if(dr1->vid != dr2->vid)
             return 0;
-        if(dr1->portMapCnt != dr2->portMapCnt)
+        if(dr1->prio != dr2->prio)
             return 0;
         if(dr1->portMap != dr2->portMap)
-            for(i = 0; i < dr1->portMapCnt; i++)
-                if(   dr1->portMap[i].filter != dr2->portMap[i].filter
-                   || dr1->portMap[i].prio != dr2->portMap[i].prio)
+            for(i = 0; i < portCnt; i++)
+                if(dr1->portMap[i].filter != dr2->portMap[i].filter)
                     return 0;
         return 1;
 
@@ -286,7 +277,7 @@ static void freeRuleInternalMemory(struct FDB_rule *r)
     return;
 }
 
-static int32_t copyRuleAllocInternalMemory(struct FDB_rule *to, const struct FDB_rule *from)
+static int32_t copyRuleAllocInternalMemory(struct FDB_rule *to, const struct FDB_rule *from, const int32_t portCnt)
 {
     if(to == NULL || from == NULL)
         return -1;
@@ -296,36 +287,36 @@ static int32_t copyRuleAllocInternalMemory(struct FDB_rule *to, const struct FDB
     switch(from->type)
     {
     case FDB_RuleType_StaticFiltering:
-        to->rule.staticFiltering.portMap = malloc(to->rule.staticFiltering.portMapCnt * sizeof(struct FDB_PortMapEntry));
+        to->rule.staticFiltering.portMap = calloc(portCnt, sizeof(struct FDB_PortMapEntry));
         if(to->rule.staticFiltering.portMap == NULL)
             return -3;
-        memcpy(to->rule.staticFiltering.portMap, from->rule.staticFiltering.portMap, to->rule.staticFiltering.portMapCnt * sizeof(struct FDB_PortMapEntry));
+        memcpy(to->rule.staticFiltering.portMap, from->rule.staticFiltering.portMap, portCnt * sizeof(struct FDB_PortMapEntry));
         break;
     case FDB_RuleType_StaticVLANRegistration:
-        to->rule.staticVLANRegistration.portMap = malloc(to->rule.staticVLANRegistration.portMapCnt * sizeof(struct FDB_PortMapEntry));
+        to->rule.staticVLANRegistration.portMap = calloc(portCnt, sizeof(struct FDB_PortMapEntry));
         if(to->rule.staticVLANRegistration.portMap == NULL)
             return -3;
-        memcpy(to->rule.staticVLANRegistration.portMap, from->rule.staticVLANRegistration.portMap, to->rule.staticVLANRegistration.portMapCnt * sizeof(struct FDB_PortMapEntry));
+        memcpy(to->rule.staticVLANRegistration.portMap, from->rule.staticVLANRegistration.portMap, portCnt * sizeof(struct FDB_PortMapEntry));
         break;
     case FDB_RuleType_DynamicFiltering:
         break;
     case FDB_RuleType_MACAddressRegistration:
-        to->rule.macAddressRegistration.portMap = malloc(to->rule.macAddressRegistration.portMapCnt * sizeof(struct FDB_PortMapEntry));
+        to->rule.macAddressRegistration.portMap = calloc(portCnt, sizeof(struct FDB_PortMapEntry));
         if(to->rule.macAddressRegistration.portMap == NULL)
             return -3;
-        memcpy(to->rule.macAddressRegistration.portMap, from->rule.macAddressRegistration.portMap, to->rule.macAddressRegistration.portMapCnt * sizeof(struct FDB_PortMapEntry));
+        memcpy(to->rule.macAddressRegistration.portMap, from->rule.macAddressRegistration.portMap, portCnt * sizeof(struct FDB_PortMapEntry));
         break;
     case FDB_RuleType_DynamicVLANRegistration:
-        to->rule.dynamicVLANRegistration.portMap = malloc(to->rule.dynamicVLANRegistration.portMapCnt * sizeof(struct FDB_PortMapEntry));
+        to->rule.dynamicVLANRegistration.portMap = calloc(portCnt, sizeof(struct FDB_PortMapEntry));
         if(to->rule.dynamicVLANRegistration.portMap == NULL)
             return -3;
-        memcpy(to->rule.dynamicVLANRegistration.portMap, from->rule.dynamicVLANRegistration.portMap, to->rule.dynamicVLANRegistration.portMapCnt * sizeof(struct FDB_PortMapEntry));
+        memcpy(to->rule.dynamicVLANRegistration.portMap, from->rule.dynamicVLANRegistration.portMap, portCnt * sizeof(struct FDB_PortMapEntry));
         break;
     case FDB_RuleType_DynamicReservation:
-        to->rule.dynamicReservation.portMap = malloc(to->rule.dynamicReservation.portMapCnt * sizeof(struct FDB_PortMapEntry));
+        to->rule.dynamicReservation.portMap = calloc(portCnt, sizeof(struct FDB_PortMapEntry));
         if(to->rule.dynamicReservation.portMap == NULL)
             return -3;
-        memcpy(to->rule.dynamicReservation.portMap, from->rule.dynamicReservation.portMap, to->rule.dynamicReservation.portMapCnt * sizeof(struct FDB_PortMapEntry));
+        memcpy(to->rule.dynamicReservation.portMap, from->rule.dynamicReservation.portMap, portCnt * sizeof(struct FDB_PortMapEntry));
         break;
 
     default:
@@ -344,17 +335,18 @@ static int32_t copyRuleAllocInternalMemory(struct FDB_rule *to, const struct FDB
 static int32_t updateBridgeForwarding(const struct FDB_state *s)
 {
     uint32_t i, j, resu = 0;
+    struct BridgeForwarding_ruleset rs;
+
+    memset(&rs, 0, sizeof(struct BridgeForwarding_ruleset));
 
     // start with VLANs filtering rules
     {
-        uint32_t vlanCnt = 0;
-        uint16_t *vlans = malloc(s->ruleCnt * sizeof(uint16_t));
-        struct FDB_PortMapEntry **staticPortMaps = malloc(s->ruleCnt * sizeof(struct FDB_PortMapEntry*));
-        struct FDB_PortMapEntry **dynamicPortMaps = malloc(s->ruleCnt * sizeof(struct FDB_PortMapEntry*));
-        enum BridgeForwarding_action *portAction = malloc(s->portCnt * sizeof(enum BridgeForwarding_action));
-        uint16_t *untaggedPortVlans = malloc(s->portCnt * sizeof(uint16_t));
+        int32_t vlanCnt = 0;
+        uint16_t *vlans = calloc(s->ruleCnt, sizeof(uint16_t));
+        struct FDB_PortMapEntry **staticPortMaps = calloc(s->ruleCnt, sizeof(struct FDB_PortMapEntry*));
+        struct FDB_PortMapEntry **dynamicPortMaps = calloc(s->ruleCnt, sizeof(struct FDB_PortMapEntry*));
 
-        if(vlans == NULL || staticPortMaps == NULL || dynamicPortMaps == NULL || portAction == NULL || untaggedPortVlans == NULL)
+        if(vlans == NULL || staticPortMaps == NULL || dynamicPortMaps == NULL)
         {
             resu = -1;
             goto vlanEnd;
@@ -398,12 +390,36 @@ static int32_t updateBridgeForwarding(const struct FDB_state *s)
             }
         }
 
+        rs.vlans = calloc(vlanCnt, sizeof(struct BridgeForwarding_vlanRule));
+        rs.portDefaultVLANs = calloc(s->portCnt, sizeof(uint16_t));
+        if(rs.vlans == NULL || rs.portDefaultVLANs == NULL)
+        {
+            resu = -1;
+            goto vlanEnd;
+        }
+        rs.vlanCnt = vlanCnt;
+
         // okay, now generate forwarding flags based on static and dynamic portMaps
         // ... and update the BridgeForwarding tables
-        if(BridgeForwarding_delAllVLAN(s->bridgeForwarding) != 0)
-        {   resu = -2; goto vlanEnd; }
         for(i = 0; i < vlanCnt; i++)
         {
+            rs.vlans[i].vid = vlans[i];
+
+            rs.vlans[i].portActions = calloc(s->portCnt, sizeof(enum BridgeForwarding_action));
+            rs.vlans[i].allIndividualActions = calloc(s->portCnt, sizeof(enum BridgeForwarding_action));
+            rs.vlans[i].allGroupActions = calloc(s->portCnt, sizeof(enum BridgeForwarding_action));
+            rs.vlans[i].allUnregisteredIndividualActions = calloc(s->portCnt, sizeof(enum BridgeForwarding_action));
+            rs.vlans[i].allUnregisteredGroupActions = calloc(s->portCnt, sizeof(enum BridgeForwarding_action));
+            if(   rs.vlans[i].portActions == NULL
+               || rs.vlans[i].allIndividualActions == NULL
+               || rs.vlans[i].allGroupActions == NULL
+               || rs.vlans[i].allUnregisteredIndividualActions == NULL
+               || rs.vlans[i].allUnregisteredGroupActions == NULL)
+            {
+                resu = -1;
+                goto vlanEnd;
+            }
+
             for(j = 0; j < s->portCnt; j++)
             {
                 int8_t forward = -1;
@@ -417,7 +433,7 @@ static int32_t updateBridgeForwarding(const struct FDB_state *s)
 
                     // analyse default (untagged state) for this vlan port
                     if(staticPortMaps[i][j].forwardUntagged)
-                        untaggedPortVlans[j] = vlans[i];
+                        rs.portDefaultVLANs[j] = vlans[i];
                 }
                 if(forward == -1 && dynamicPortMaps[i] != NULL)
                 {
@@ -426,21 +442,19 @@ static int32_t updateBridgeForwarding(const struct FDB_state *s)
                     else if(dynamicPortMaps[i][j].filter == FDB_PortMapResult_Forward)
                         forward = 1;
                 }
+
+                // set vlan filtering
                 if(forward == 1)
-                    portAction[j] = BridgeForwarding_action_Forward;
+                    rs.vlans[i].portActions[j] = BridgeForwarding_action_Forward;
                 else
-                    portAction[j] = BridgeForwarding_action_Filter;
+                    rs.vlans[i].portActions[j] = BridgeForwarding_action_Filter;
+
+                // set defaults for the remains
+                rs.vlans[i].allIndividualActions[j] = BridgeForwarding_action_NextStage;
+                rs.vlans[i].allGroupActions[j] = BridgeForwarding_action_NextStage;
+                rs.vlans[i].allUnregisteredIndividualActions[j] = BridgeForwarding_action_NextStage;
+                rs.vlans[i].allUnregisteredGroupActions[j] = BridgeForwarding_action_NextStage;
             }
-
-            if(BridgeForwarding_addVLAN(s->bridgeForwarding, vlans[i], portAction) != 0)
-            {   resu = -2; goto vlanEnd; }
-        }
-
-        // update default (untagged) vlans for ports
-        for(i = 0; i < s->portCnt; i++)
-        {
-            if(BridgeForwarding_setPortDefauldVID(s->bridgeForwarding, untaggedPortVlans[i], i) != 0)
-            {   resu = -2; goto vlanEnd; }
         }
 
 vlanEnd:
@@ -450,34 +464,24 @@ vlanEnd:
             free(staticPortMaps);
         if(dynamicPortMaps != NULL)
             free(dynamicPortMaps);
-        if(portAction != NULL)
-            free(portAction);
-        if(untaggedPortVlans != NULL)
-            free(untaggedPortVlans);
         if(resu != 0)
-            return resu;
+            goto end;
     }
 
     // here come the mac filtering rules ...
     {
-        enum BridgeForwarding_action *portAction = malloc(s->portCnt * sizeof(enum BridgeForwarding_action));
+        // search for static filtering rules with defined mac addresses
 
-        if(portAction == NULL)
+        rs.firstStageRules = calloc(s->ruleCnt, sizeof(struct BridgeForwarding_macRule));
+        rs.firstStageRuleCnt = 0;
+        if(rs.firstStageRules == NULL)
         {
             resu = -1;
             goto macEnd;
         }
 
-        if(BridgeForwarding_delAllDstMACFilter(
-                s->bridgeForwarding) != 0)
-        {   resu = -2; goto vlanEnd; }
-
-        // search for static filtering rules for defined mac addresses
         for(i = 0; i < s->ruleCnt; i++)
         {
-            uint8_t *curMac;
-            uint32_t curPrio;
-            uint16_t curVID, curVIDmask = ETHERNET_VID_MASK;
             struct FDB_PortMapEntry *curPortMap;
 
             if(s->rules[i].type != FDB_RuleType_StaticFiltering)
@@ -486,37 +490,202 @@ vlanEnd:
                || s->rules[i].rule.staticFiltering.addrType != FDB_AddressType_Group)
                 continue;
 
-            curMac = s->rules[i].rule.staticFiltering.mac;
-            curPrio = s->rules[i].rule.staticFiltering.prio;
-            curVID = s->rules[i].rule.staticFiltering.vid;
-            if(curVID == ETHERNET_VID_WILDCARD)
-                curVIDmask = 0x0000;
+            memcpy(rs.firstStageRules[rs.firstStageRuleCnt].mac, s->rules[i].rule.staticFiltering.mac, ETHERNET_MAC_LEN);
+            memcpy(rs.firstStageRules[rs.firstStageRuleCnt].macMask, ETHERNET_MAC_MASK, ETHERNET_MAC_LEN);
+            rs.firstStageRules[rs.firstStageRuleCnt].vid = s->rules[i].rule.staticFiltering.vid;
+            if(rs.firstStageRules[rs.firstStageRuleCnt].vid == ETHERNET_VID_WILDCARD)
+                rs.firstStageRules[rs.firstStageRuleCnt].vidMask = 0x0000;
+            else
+                rs.firstStageRules[rs.firstStageRuleCnt].vid = ETHERNET_VID_MASK;
+
             curPortMap = s->rules[i].rule.staticFiltering.portMap;
+            rs.firstStageRules[rs.firstStageRuleCnt].portActions = calloc(s->portCnt, sizeof(enum BridgeForwarding_action));
+            if(rs.firstStageRules[rs.firstStageRuleCnt].portActions == NULL)
+            {
+                resu = -1;
+                goto macEnd;
+            }
 
             for(j = 0; j < s->portCnt; j++)
             {
                 if(curPortMap[j].filter == FDB_PortMapResult_Forward)
-                    portAction[j] = BridgeForwarding_action_Forward;
+                    rs.firstStageRules[rs.firstStageRuleCnt].portActions[j] = BridgeForwarding_action_Forward;
                 else if(curPortMap[j].filter == FDB_PortMapResult_Dynamic)
-                    portAction[j] = BridgeForwarding_action_Dynamic;
+                    rs.firstStageRules[rs.firstStageRuleCnt].portActions[j] = BridgeForwarding_action_NextStage;
                 else
-                    portAction[j] = BridgeForwarding_action_Filter;
+                    rs.firstStageRules[rs.firstStageRuleCnt].portActions[j] = BridgeForwarding_action_Filter;
             }
 
-            if(BridgeForwarding_addDstMACFilter(s->bridgeForwarding, curMac, ETHERNET_MAC_MASK, curVID, curVIDmask, portAction, curPrio) != 0)
-            {   resu = -2; goto macEnd; }
+            rs.firstStageRules[rs.firstStageRuleCnt].prio = s->rules[i].rule.staticFiltering.prio;
+
+            rs.firstStageRuleCnt++;
+        }
+        // shrink allocated memory to needed size ...
+        rs.firstStageRules = realloc(rs.firstStageRules, rs.firstStageRuleCnt * sizeof(struct BridgeForwarding_macRule));
+        if(rs.firstStageRules == NULL)
+        {
+            resu = -1;
+            goto macEnd;
         }
 
+        // handle wildcard mac entries
+        for(i = 0; i < s->ruleCnt; i++)
+        {
+            enum FDB_AddressType curAddrType;
+            struct FDB_PortMapEntry *curPortMap;
+            enum BridgeForwarding_action *targetActions;
+            uint16_t curVid;
+            int32_t vIdx;
 
+            if(s->rules[i].type == FDB_RuleType_StaticFiltering)
+            {
+                if(   s->rules[i].rule.staticFiltering.addrType == FDB_AddressType_Group
+                   || s->rules[i].rule.staticFiltering.addrType == FDB_AddressType_Individual)
+                    continue;
+                curAddrType = s->rules[i].rule.staticFiltering.addrType;
+                curPortMap = s->rules[i].rule.staticFiltering.portMap;
+                curVid = s->rules[i].rule.staticFiltering.vid;
+            }
+            else if(s->rules[i].type == FDB_RuleType_MACAddressRegistration)
+            {
+                if(   s->rules[i].rule.macAddressRegistration.addrType == FDB_AddressType_Group
+                   || s->rules[i].rule.macAddressRegistration.addrType == FDB_AddressType_Individual)
+                    continue;
+                curAddrType = s->rules[i].rule.macAddressRegistration.addrType;
+                curPortMap = s->rules[i].rule.macAddressRegistration.portMap;
+                curVid = s->rules[i].rule.macAddressRegistration.vid;
+            }
+            else
+                continue;
 
-        // TODO: clear all dynamic entries in BridgeForwarding
+            // find vlan rule
+            for(vIdx = 0; vIdx < rs.vlanCnt; vIdx++)
+                if(rs.vlans[vIdx].vid == curVid)
+                    break;
+            if(vIdx >= rs.vlanCnt)
+                continue; // vlan rule does not exist
+
+            // distinguish target
+            if(curAddrType == FDB_AddressType_AllIndividual)
+                targetActions = rs.vlans[vIdx].allIndividualActions;
+            else if(curAddrType == FDB_AddressType_AllGroup)
+                targetActions = rs.vlans[vIdx].allGroupActions;
+            else if(curAddrType == FDB_AddressType_AllUnregIndividual)
+                targetActions = rs.vlans[vIdx].allUnregisteredIndividualActions;
+            else if(curAddrType == FDB_AddressType_AllUnregGroup)
+                targetActions = rs.vlans[vIdx].allUnregisteredGroupActions;
+            else
+                continue;
+
+            // translate port actions
+            for(j = 0; j < s->portCnt; j++)
+            {
+                if(curPortMap[j].filter == FDB_PortMapResult_Forward)
+                    targetActions[j] = BridgeForwarding_action_Forward;
+                else if(curPortMap[j].filter == FDB_PortMapResult_Filter)
+                    targetActions[j] = BridgeForwarding_action_Filter;
+            }
+        }
+
+        // search for dynamic filtering rules with defined mac addresses
+
+        rs.secondStageRules = calloc(s->ruleCnt, sizeof(struct BridgeForwarding_macRule));
+        rs.secondStageRuleCnt = 0;
+        if(rs.secondStageRules == NULL)
+        {
+            resu = -1;
+            goto macEnd;
+        }
+
+        for(i = 0; i < s->ruleCnt; i++)
+        {
+            struct FDB_PortMapEntry *curPortMap = NULL;
+            int32_t curPortIdx = -1;
+
+            if(s->rules[i].type == FDB_RuleType_DynamicFiltering)
+            {
+                memcpy(rs.secondStageRules[rs.secondStageRuleCnt].mac, s->rules[i].rule.dynamicFiltering.mac, ETHERNET_MAC_LEN);
+                memcpy(rs.secondStageRules[rs.secondStageRuleCnt].macMask, ETHERNET_MAC_MASK, ETHERNET_MAC_LEN);
+                rs.secondStageRules[rs.secondStageRuleCnt].vid = s->rules[i].rule.dynamicFiltering.vid;
+                rs.secondStageRules[rs.secondStageRuleCnt].prio = s->rules[i].rule.dynamicFiltering.portMapPrio;
+                curPortIdx = s->rules[i].rule.dynamicFiltering.portMapPort;
+            }
+            else if(s->rules[i].type == FDB_RuleType_MACAddressRegistration)
+            {
+                if(   s->rules[i].rule.macAddressRegistration.addrType != FDB_AddressType_Individual
+                   && s->rules[i].rule.macAddressRegistration.addrType != FDB_AddressType_Group)
+                    continue;
+
+                memcpy(rs.secondStageRules[rs.secondStageRuleCnt].mac, s->rules[i].rule.macAddressRegistration.mac, ETHERNET_MAC_LEN);
+                memcpy(rs.secondStageRules[rs.secondStageRuleCnt].macMask, ETHERNET_MAC_MASK, ETHERNET_MAC_LEN);
+                rs.secondStageRules[rs.secondStageRuleCnt].vid = s->rules[i].rule.macAddressRegistration.vid;
+                rs.secondStageRules[rs.secondStageRuleCnt].prio = s->rules[i].rule.macAddressRegistration.prio;
+                curPortMap = s->rules[i].rule.macAddressRegistration.portMap;
+            }
+            else if(s->rules[i].type == FDB_RuleType_DynamicReservation)
+            {
+                memcpy(rs.secondStageRules[rs.secondStageRuleCnt].mac, s->rules[i].rule.dynamicReservation.mac, ETHERNET_MAC_LEN);
+                memcpy(rs.secondStageRules[rs.secondStageRuleCnt].macMask, ETHERNET_MAC_MASK, ETHERNET_MAC_LEN);
+                rs.secondStageRules[rs.secondStageRuleCnt].vid = s->rules[i].rule.dynamicReservation.vid;
+                rs.secondStageRules[rs.secondStageRuleCnt].prio = s->rules[i].rule.dynamicReservation.prio;
+                curPortMap = s->rules[i].rule.dynamicReservation.portMap;
+            }
+            else
+                continue;
+
+            if(rs.secondStageRules[rs.secondStageRuleCnt].vid == ETHERNET_VID_WILDCARD)
+                rs.secondStageRules[rs.secondStageRuleCnt].vidMask = 0x0000;
+            else
+                rs.secondStageRules[rs.secondStageRuleCnt].vidMask = ETHERNET_VID_MASK;
+
+            rs.secondStageRules[rs.secondStageRuleCnt].portActions = calloc(s->portCnt, sizeof(enum BridgeForwarding_action));
+            if(rs.secondStageRules[rs.secondStageRuleCnt].portActions == NULL)
+            {
+                resu = -1;
+                goto macEnd;
+            }
+
+            if(curPortMap != NULL)
+            {
+                for(j = 0; j < s->portCnt; j++)
+                {
+                    if(curPortMap[j].filter == FDB_PortMapResult_Forward)
+                        rs.secondStageRules[rs.secondStageRuleCnt].portActions[j] = BridgeForwarding_action_Forward;
+                    else
+                        rs.secondStageRules[rs.secondStageRuleCnt].portActions[j] = BridgeForwarding_action_Filter;
+                }
+            }
+            else
+            {
+                for(j = 0; j < s->portCnt; j++)
+                {
+                    if(j == curPortIdx)
+                        rs.secondStageRules[rs.secondStageRuleCnt].portActions[j] = BridgeForwarding_action_Forward;
+                    else
+                        rs.secondStageRules[rs.secondStageRuleCnt].portActions[j] = BridgeForwarding_action_Filter;
+                }
+            }
+
+            rs.secondStageRuleCnt++;
+        }
+        // shrink allocated memory to needed size ...
+        rs.secondStageRules = realloc(rs.secondStageRules, rs.secondStageRuleCnt * sizeof(struct BridgeForwarding_macRule));
+        if(rs.secondStageRules == NULL)
+        {
+            resu = -1;
+            goto macEnd;
+        }
+
 macEnd:
-        if(portAction != NULL)
-            free(portAction);
         if(resu != 0)
-            return resu;
+            goto end;
     }
 
+end:
+    // free stuff
+
+    if(resu != 0)
+        return resu;
     return 0;
 }
 
