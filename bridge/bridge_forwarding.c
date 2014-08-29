@@ -300,6 +300,7 @@ static struct BridgeForwarding_ruleset* deepCopyRuleset(const struct BridgeForwa
     resu->portDefaultVLANs = calloc(portCnt, sizeof(uint16_t));
     if(resu->portDefaultVLANs == NULL)
         goto fail;
+    memcpy(resu->portDefaultVLANs, r->portDefaultVLANs, portCnt * sizeof(uint16_t));
 
     resu->vlanCnt = r->vlanCnt;
     if(r->vlanCnt > 0)
@@ -379,7 +380,7 @@ static void freeRuleset(struct BridgeForwarding_ruleset *r)
     if(r == NULL)
         return;
 
-    if(r->portDefaultVLANs)
+    if(r->portDefaultVLANs != NULL)
         free(r->portDefaultVLANs);
 
     if(r->vlanCnt > 0 && r->vlans != NULL)
@@ -471,6 +472,8 @@ static void packetHandler(const struct Packet_packet *p, void *context)
         wasTagged = 0;
     }
 
+    fprintf(stdout, ">> %02X:%02X:%02X:%02X:%02X:%02X (%u): %u [%c:%u] -> ", ethHdr->dst[0], ethHdr->dst[1], ethHdr->dst[2], ethHdr->dst[3], ethHdr->dst[4], ethHdr->dst[5], p->len, p->port, wasTagged ? 't' : 'u', vid);
+
     vIdx = matchVLAN(rs->vlans, rs->vlanCnt, vid);
     fIdx = matchMacRule(rs->firstStageRules, rs->firstStageRuleCnt, ethHdr->dst, vid);
     sIdx = matchMacRule(rs->secondStageRules, rs->secondStageRuleCnt, ethHdr->dst, vid);
@@ -554,6 +557,8 @@ static void packetHandler(const struct Packet_packet *p, void *context)
         {   /* ... forward */ }
         else if(l != NULL && l->outPort != i)
         {   continue; }
+        else if(p->port == i)
+        {   continue; } // do not forward to own port on broadcast
         else
         {   /* ... forward */ }
 

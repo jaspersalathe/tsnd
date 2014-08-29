@@ -52,10 +52,12 @@ void init_endnode(struct HandlerTable_table *handlerTable, struct Port *ports, u
 void init_bridgenode(struct HandlerTable_table *handlerTable, struct Port *ports, uint32_t portCnt)
 {
     struct BridgeForwarding_ruleset rs;
-    struct BridgeForwarding_vlanRule vr[1];
-    struct BridgeForwarding_macRule fr[0], sr[0];
-    enum BridgeForwarding_action *allEnActs, *allDisActs, *allUnActs;
+    struct BridgeForwarding_vlanRule vr[2];
+    struct BridgeForwarding_macRule fr[1], sr[0];
+    enum BridgeForwarding_action *allEnActs, *allDisActs, *allUnActs, *acts1, *acts2;
     int32_t i;
+    uint8_t macMask[ETHERNET_MAC_LEN] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    uint8_t macMVRP[ETHERNET_MAC_LEN] = {0x01, 0x80, 0xc2, 0x00, 0x00, 0x21};
 
     if(BridgeForwarding_init(&bridgeForwardingState, handlerTable, ports, portCnt) != 0)
         exit(1);
@@ -64,8 +66,10 @@ void init_bridgenode(struct HandlerTable_table *handlerTable, struct Port *ports
     allEnActs = calloc(portCnt, sizeof(enum BridgeForwarding_action));
     allDisActs = calloc(portCnt, sizeof(enum BridgeForwarding_action));
     allUnActs = calloc(portCnt, sizeof(enum BridgeForwarding_action));
+    acts1 = calloc(portCnt, sizeof(enum BridgeForwarding_action));
+    acts2 = calloc(portCnt, sizeof(enum BridgeForwarding_action));
     rs.portDefaultVLANs = calloc(portCnt, sizeof(uint16_t));
-    if(allEnActs == NULL || allDisActs == NULL || allUnActs == NULL || rs.portDefaultVLANs == NULL)
+    if(allEnActs == NULL || allDisActs == NULL || allUnActs == NULL || rs.portDefaultVLANs == NULL || acts1 == NULL || acts2 == NULL)
         exit(1);
 
     for(i = 0; i < portCnt; i++)
@@ -73,18 +77,35 @@ void init_bridgenode(struct HandlerTable_table *handlerTable, struct Port *ports
         allEnActs[i] = BridgeForwarding_action_Forward;
         allDisActs[i] = BridgeForwarding_action_Filter;
         allUnActs[i] = BridgeForwarding_action_NextStage;
+        acts1[i] = BridgeForwarding_action_NextStage;
+        acts2[i] = BridgeForwarding_action_Filter;
         rs.portDefaultVLANs[i] = 1;
     }
+    rs.portDefaultVLANs[0] = 4;
+    acts1[0] = BridgeForwarding_action_Filter;
+    acts2[0] = BridgeForwarding_action_Forward;
 
     vr[0].vid = 1;
     vr[0].portActions = allEnActs;
     vr[0].allIndividualActions = allUnActs;
     vr[0].allGroupActions = allUnActs;
     vr[0].allUnregisteredIndividualActions = allUnActs;
-    vr[0].allUnregisteredGroupActions = allUnActs;
+    vr[0].allUnregisteredGroupActions = acts1;
+    vr[1].vid = 4;
+    vr[1].portActions = allEnActs;
+    vr[1].allIndividualActions = allUnActs;
+    vr[1].allGroupActions = allUnActs;
+    vr[1].allUnregisteredIndividualActions = allUnActs;
+    vr[1].allUnregisteredGroupActions = allUnActs;
     rs.vlans = vr;
     rs.vlanCnt = sizeof(vr) / sizeof(struct BridgeForwarding_vlanRule);
 
+    memcpy(fr[0].mac, macMVRP, ETHERNET_MAC_LEN);
+    memcpy(fr[0].macMask, macMask, ETHERNET_MAC_LEN);
+    fr[0].vid = 4;
+    fr[0].vidMask = 0;//ETHERNET_VID_MASK;
+    fr[0].portActions = acts2;
+    fr[0].prio = 0;
     rs.firstStageRules = fr;
     rs.firstStageRuleCnt = sizeof(fr) / sizeof(struct BridgeForwarding_macRule);
 
@@ -97,6 +118,8 @@ void init_bridgenode(struct HandlerTable_table *handlerTable, struct Port *ports
     free(allEnActs);
     free(allDisActs);
     free(allUnActs);
+    free(acts1);
+    free(acts2);
     free(rs.portDefaultVLANs);
 }
 

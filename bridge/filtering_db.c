@@ -54,9 +54,9 @@ int32_t FDB_addRule(struct FDB_state *state, struct FDB_rule *rule)
     if(state == NULL || rule == NULL)
         return -1;
 
-    if(checkRule(rule) != 0)
+    if(checkRule(rule, state->portCnt) != 0)
         return -2;
-    if(checkRuleConfilct(rule) != 0)
+    if(checkRuleConfilct(state, rule) != 0)
         return -4;
 
     if(state->ruleAllocCnt <= state->ruleCnt +1)
