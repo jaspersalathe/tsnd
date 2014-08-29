@@ -15,8 +15,8 @@ static int32_t cmpRules(const struct FDB_rule *r1, const struct FDB_rule *r2, co
 static void freeRuleInternalMemory(struct FDB_rule *r);
 static int32_t copyRuleAllocInternalMemory(struct FDB_rule *to, const struct FDB_rule *from, const int32_t portCnt);
 static int32_t updateBridgeForwarding(const struct FDB_state *s);
-static int32_t checkRule(const struct FDB_rule *r);
-static int32_t checkRuleConfilct(const struct FDB_rule *r);
+static int32_t checkRule(const struct FDB_rule *r, const int32_t portCnt);
+static int32_t checkRuleConfilct(const struct FDB_state *s, const struct FDB_rule *r);
 
 /*
  * Return values:
@@ -681,6 +681,9 @@ macEnd:
             goto end;
     }
 
+    if(BridgeForwarding_updateRuleset(s->bridgeForwarding, &rs) != 0)
+        resu = -2;
+
 end:
     // free stuff
 
@@ -689,12 +692,12 @@ end:
     return 0;
 }
 
-static int32_t checkRule(const struct FDB_rule *r)
+static int32_t checkRule(const struct FDB_rule *r, const int32_t portCnt)
 {
     return 0;
 }
 
-static int32_t checkRuleConfilct(const struct FDB_rule *r)
+static int32_t checkRuleConfilct(const struct FDB_state *s, const struct FDB_rule *r)
 {
     return 0;
 }

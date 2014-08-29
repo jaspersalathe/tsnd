@@ -51,8 +51,53 @@ void init_endnode(struct HandlerTable_table *handlerTable, struct Port *ports, u
 
 void init_bridgenode(struct HandlerTable_table *handlerTable, struct Port *ports, uint32_t portCnt)
 {
+    struct BridgeForwarding_ruleset rs;
+    struct BridgeForwarding_vlanRule vr[1];
+    struct BridgeForwarding_macRule fr[0], sr[0];
+    enum BridgeForwarding_action *allEnActs, *allDisActs, *allUnActs;
+    int32_t i;
+
     if(BridgeForwarding_init(&bridgeForwardingState, handlerTable, ports, portCnt) != 0)
         exit(1);
+
+    memset(&rs, 0, sizeof(struct BridgeForwarding_ruleset));
+    allEnActs = calloc(portCnt, sizeof(enum BridgeForwarding_action));
+    allDisActs = calloc(portCnt, sizeof(enum BridgeForwarding_action));
+    allUnActs = calloc(portCnt, sizeof(enum BridgeForwarding_action));
+    rs.portDefaultVLANs = calloc(portCnt, sizeof(uint16_t));
+    if(allEnActs == NULL || allDisActs == NULL || allUnActs == NULL || rs.portDefaultVLANs == NULL)
+        exit(1);
+
+    for(i = 0; i < portCnt; i++)
+    {
+        allEnActs[i] = BridgeForwarding_action_Forward;
+        allDisActs[i] = BridgeForwarding_action_Filter;
+        allUnActs[i] = BridgeForwarding_action_NextStage;
+        rs.portDefaultVLANs[i] = 1;
+    }
+
+    vr[0].vid = 1;
+    vr[0].portActions = allEnActs;
+    vr[0].allIndividualActions = allUnActs;
+    vr[0].allGroupActions = allUnActs;
+    vr[0].allUnregisteredIndividualActions = allUnActs;
+    vr[0].allUnregisteredGroupActions = allUnActs;
+    rs.vlans = vr;
+    rs.vlanCnt = sizeof(vr) / sizeof(struct BridgeForwarding_vlanRule);
+
+    rs.firstStageRules = fr;
+    rs.firstStageRuleCnt = sizeof(fr) / sizeof(struct BridgeForwarding_macRule);
+
+    rs.secondStageRules = sr;
+    rs.secondStageRuleCnt = sizeof(sr) / sizeof(struct BridgeForwarding_macRule);
+
+    if(BridgeForwarding_updateRuleset(&bridgeForwardingState, &rs) != 0)
+        exit(1);
+
+    free(allEnActs);
+    free(allDisActs);
+    free(allUnActs);
+    free(rs.portDefaultVLANs);
 }
 
 
