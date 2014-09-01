@@ -72,14 +72,14 @@ struct FDB_DynamicFiltering
     uint8_t mac[ETHERNET_MAC_LEN];
     uint16_t vid; // korrekt: fid
     uint32_t portMapPort; // Port to forward to ...
-    uint8_t portMapPrio;  // ... and priority to use.
+    uint8_t prio;  // ... and priority to use.
 };
 
 struct FDB_MACAddressRegistration
 {
     uint8_t mac[ETHERNET_MAC_LEN];
     enum FDB_AddressType addrType;
-    // not allowed: AllUnregIndividual
+    // not allowed: AllUnregIndividual, AllIndividual
     uint16_t vid;
     struct FDB_PortMapEntry *portMap;
     uint8_t prio; // to distinguish the queue to be used for forwarding

@@ -89,4 +89,8 @@ int32_t BridgeForwarding_init(struct BridgeForwarding_state *state, struct Handl
 int32_t BridgeForwarding_updateRuleset(struct BridgeForwarding_state *state, struct BridgeForwarding_ruleset *ruleset);
 
 
+struct BridgeForwarding_ruleset* BridgeForwarding_deepCopyRuleset(const struct BridgeForwarding_ruleset *r, const int32_t portCnt);
+void BridgeForwarding_freeRuleset(struct BridgeForwarding_ruleset *r);
+
+
 #endif /* BRIDGE_FORWARDING_H_ */
