@@ -20,6 +20,7 @@
 #include "port.h"
 #include "packet.h"
 #include "bridge/bridge_forwarding.h"
+#include "bridge/filtering_db.h"
 
 
 #define PACKLEN (64*1024)
@@ -30,7 +31,8 @@ struct HandlerTable_table handlerTable;
 struct Port *ports;
 uint32_t portCnt;
 struct pollfd *pollFds;
-struct BridgeForwarding_state bridgeForwardingState;
+struct BridgeForwarding_state bfState;
+struct FDB_state fdbState;
 
 
 void help(char *myname)
@@ -49,7 +51,7 @@ void init_endnode(struct HandlerTable_table *handlerTable, struct Port *ports, u
         exit(1);
 }
 
-void init_bridgenode(struct HandlerTable_table *handlerTable, struct Port *ports, uint32_t portCnt)
+void init_bridgenode_testBridgeForwarding(struct HandlerTable_table *handlerTable, struct Port *ports, uint32_t portCnt)
 {
     struct BridgeForwarding_ruleset rs;
     struct BridgeForwarding_vlanRule vr[2];
@@ -59,7 +61,7 @@ void init_bridgenode(struct HandlerTable_table *handlerTable, struct Port *ports
     uint8_t macMask[ETHERNET_MAC_LEN] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     uint8_t macMVRP[ETHERNET_MAC_LEN] = {0x01, 0x80, 0xc2, 0x00, 0x00, 0x21};
 
-    if(BridgeForwarding_init(&bridgeForwardingState, handlerTable, ports, portCnt) != 0)
+    if(BridgeForwarding_init(&bfState, handlerTable, ports, portCnt) != 0)
         exit(1);
 
     memset(&rs, 0, sizeof(struct BridgeForwarding_ruleset));
@@ -112,7 +114,7 @@ void init_bridgenode(struct HandlerTable_table *handlerTable, struct Port *ports
     rs.secondStageRules = sr;
     rs.secondStageRuleCnt = sizeof(sr) / sizeof(struct BridgeForwarding_macRule);
 
-    if(BridgeForwarding_updateRuleset(&bridgeForwardingState, &rs) != 0)
+    if(BridgeForwarding_updateRuleset(&bfState, &rs) != 0)
         exit(1);
 
     free(allEnActs);
@@ -123,6 +125,50 @@ void init_bridgenode(struct HandlerTable_table *handlerTable, struct Port *ports
     free(rs.portDefaultVLANs);
 }
 
+void init_bridgenode_testFDB(struct HandlerTable_table *handlerTable, struct Port *ports, uint32_t portCnt)
+{
+
+    struct FDB_rule r;
+    struct FDB_PortMapEntry *pm = calloc(portCnt, sizeof(struct FDB_PortMapEntry));
+
+    uint32_t i;
+
+    if(pm == NULL)
+        exit(1);
+
+    if(BridgeForwarding_init(&bfState, handlerTable, ports, portCnt) != 0)
+        exit(1);
+
+    if(FDB_init(&fdbState, &bfState, portCnt) != 0)
+        exit(1);
+
+    // add default VLAN
+    r.type = FDB_RuleType_StaticVLANRegistration;
+    r.rule.staticVLANRegistration.vid = ETHERNET_VID_DEFAULT;
+    for(i = 0; i < portCnt; i++)
+    {
+        pm[i].filter = FDB_PortMapResult_Forward;
+        pm[i].forwardUntagged = 1;
+    }
+    pm[0].forwardUntagged = 0;
+    r.rule.staticVLANRegistration.portMap = pm;
+    if(FDB_addRule(&fdbState, &r) != 0)
+        exit(1);
+
+    r.type = FDB_RuleType_StaticVLANRegistration;
+    r.rule.staticVLANRegistration.vid = 4;
+    for(i = 0; i < portCnt; i++)
+    {
+        pm[i].filter = FDB_PortMapResult_Forward;
+        pm[i].forwardUntagged = 0;
+    }
+    pm[0].forwardUntagged = 1;
+    r.rule.staticVLANRegistration.portMap = pm;
+    if(FDB_addRule(&fdbState, &r) != 0)
+        exit(1);
+
+    free(pm);
+}
 
 int main(int argc, char **argv)
 {
@@ -188,6 +234,7 @@ int main(int argc, char **argv)
     if(pollFds == NULL)
     {
         fprintf(stderr, "could not allocate memory (pollFds)\n");
+        return -1;
     }
     for(int i = 0; i < devListCnt; i++)
     {
@@ -208,7 +255,7 @@ int main(int argc, char **argv)
     if(bridgemode)
     {
         puts("initing in bridgemode");
-        init_bridgenode(&handlerTable, ports, portCnt);
+        init_bridgenode_testFDB(&handlerTable, ports, portCnt);
     }
     else
     {

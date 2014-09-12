@@ -78,7 +78,9 @@ int32_t FDB_addRule(struct FDB_state *state, struct FDB_rule *rule)
 
     state->ruleCnt++;
 
-    updateBridgeForwarding(state);
+    resu = updateBridgeForwarding(state);
+    if(resu != 0)
+        return resu;
 
     return 0;
 }
@@ -334,7 +336,8 @@ static int32_t copyRuleAllocInternalMemory(struct FDB_rule *to, const struct FDB
  */
 static int32_t updateBridgeForwarding(const struct FDB_state *s)
 {
-    uint32_t i, j, resu = 0;
+    uint32_t i, j;
+    int32_t resu = 0;
     struct BridgeForwarding_ruleset *rs = calloc(1, sizeof(struct BridgeForwarding_ruleset));
 
     if(rs == NULL)
@@ -393,7 +396,7 @@ static int32_t updateBridgeForwarding(const struct FDB_state *s)
 
         rs->vlans = calloc(vlanCnt, sizeof(struct BridgeForwarding_vlanRule));
         rs->portDefaultVLANs = calloc(s->portCnt, sizeof(uint16_t));
-        if(rs->vlans == NULL || rs->portDefaultVLANs == NULL)
+        if(vlanCnt > 0 && (rs->vlans == NULL || rs->portDefaultVLANs == NULL))
         {
             resu = -1;
             goto vlanEnd;
@@ -523,7 +526,7 @@ vlanEnd:
         }
         // shrink allocated memory to needed size ...
         rs->firstStageRules = realloc(rs->firstStageRules, rs->firstStageRuleCnt * sizeof(struct BridgeForwarding_macRule));
-        if(rs->firstStageRules == NULL)
+        if(rs->firstStageRuleCnt > 0 && rs->firstStageRules == NULL)
         {
             resu = -1;
             goto macEnd;
@@ -671,7 +674,7 @@ vlanEnd:
         }
         // shrink allocated memory to needed size ...
         rs->secondStageRules = realloc(rs->secondStageRules, rs->secondStageRuleCnt * sizeof(struct BridgeForwarding_macRule));
-        if(rs->secondStageRules == NULL)
+        if(rs->secondStageRuleCnt > 0 && rs->secondStageRules == NULL)
         {
             resu = -1;
             goto macEnd;

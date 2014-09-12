@@ -426,7 +426,7 @@ static void packetHandler(const struct Packet_packet *p, void *context)
     struct BridgeForwarding_ruleset *rs;
     uint16_t vid;
     struct Ethernet_headerVLAN *ethHdr;
-    struct Packet_packet pOut, pOutV;
+    struct Packet_packet pOut = { 0 }, pOutV = { 0 };
     int wasTagged, isGroupMac;
     int32_t i, vIdx, fIdx, sIdx, lIdx, *portForwarded;
     struct BridgeForwarding_vlanRule *v = NULL;
@@ -591,8 +591,15 @@ noForwarding:
 
 static void learnMACNotifier(struct BridgeForwarding_state *state, const uint8_t mac[ETHERNET_MAC_LEN], const uint32_t portIdx, const struct Common_timestamp *t)
 {
-    int32_t idx = matchLearnedMAC(state, mac);
-    struct internalState *is = state->state;
+    int32_t idx;
+    struct internalState *is;
+
+    // only learn individual mac
+    if(Ethernet_isGroupMac(mac))
+        return;
+
+    idx = matchLearnedMAC(state, mac);
+    is = state->state;
 
     if(idx < 0)
     {
