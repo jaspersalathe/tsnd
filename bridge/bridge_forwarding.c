@@ -72,7 +72,6 @@ int32_t BridgeForwarding_init(struct BridgeForwarding_state *state, struct Handl
     enum BridgeForwarding_action *defaultVLANrulePortActions;
     enum BridgeForwarding_action *defaultVLANruleAllIndividualActions;
     enum BridgeForwarding_action *defaultVLANruleAllGroupActions;
-    enum BridgeForwarding_action *defaultVLANruleAllUnregisteredIndividualActions;
     enum BridgeForwarding_action *defaultVLANruleAllUnregisteredGroupActions;
 
     if(state == NULL || table == NULL || ports == NULL)
@@ -88,9 +87,8 @@ int32_t BridgeForwarding_init(struct BridgeForwarding_state *state, struct Handl
     defaultVLANrulePortActions = calloc(portCnt, sizeof(enum BridgeForwarding_action));
     defaultVLANruleAllIndividualActions = calloc(portCnt, sizeof(enum BridgeForwarding_action));
     defaultVLANruleAllGroupActions = calloc(portCnt, sizeof(enum BridgeForwarding_action));
-    defaultVLANruleAllUnregisteredIndividualActions = calloc(portCnt, sizeof(enum BridgeForwarding_action));
     defaultVLANruleAllUnregisteredGroupActions = calloc(portCnt, sizeof(enum BridgeForwarding_action));
-    if(iState == NULL || entry == NULL || ruleset == NULL || defaultVLANs == NULL || defaultVLANrule == NULL || defaultVLANrulePortActions == NULL || defaultVLANruleAllIndividualActions == NULL || defaultVLANruleAllGroupActions == NULL || defaultVLANruleAllUnregisteredIndividualActions == NULL || defaultVLANruleAllUnregisteredGroupActions == NULL)
+    if(iState == NULL || entry == NULL || ruleset == NULL || defaultVLANs == NULL || defaultVLANrule == NULL || defaultVLANrulePortActions == NULL || defaultVLANruleAllIndividualActions == NULL || defaultVLANruleAllGroupActions == NULL || defaultVLANruleAllUnregisteredGroupActions == NULL)
     {   resu = -3; goto fail; }
 
     state->ports = ports;
@@ -107,13 +105,11 @@ int32_t BridgeForwarding_init(struct BridgeForwarding_state *state, struct Handl
         defaultVLANrulePortActions[i] = BridgeForwarding_action_Forward;
         defaultVLANruleAllIndividualActions[i] = BridgeForwarding_action_Filter;
         defaultVLANruleAllGroupActions[i] = BridgeForwarding_action_Forward;
-        defaultVLANruleAllUnregisteredIndividualActions[i] = BridgeForwarding_action_Forward;
         defaultVLANruleAllUnregisteredGroupActions[i] = BridgeForwarding_action_Forward;
     }
     defaultVLANrule->portActions = defaultVLANrulePortActions;
     defaultVLANrule->allIndividualActions = defaultVLANruleAllIndividualActions;
     defaultVLANrule->allGroupActions = defaultVLANruleAllGroupActions;
-    defaultVLANrule->allUnregisteredIndividualActions = defaultVLANruleAllUnregisteredIndividualActions;
     defaultVLANrule->allUnregisteredGroupActions = defaultVLANruleAllUnregisteredGroupActions;
 
     ruleset->vlans = defaultVLANrule;
@@ -151,8 +147,6 @@ fail:
         free(defaultVLANruleAllIndividualActions);
     if(defaultVLANruleAllGroupActions != NULL)
         free(defaultVLANruleAllGroupActions);
-    if(defaultVLANruleAllUnregisteredIndividualActions != NULL)
-        free(defaultVLANruleAllUnregisteredIndividualActions);
     if(defaultVLANruleAllUnregisteredGroupActions != NULL)
         free(defaultVLANruleAllUnregisteredGroupActions);
     return resu;
@@ -221,8 +215,6 @@ static int32_t checkRuleset(const  struct BridgeForwarding_ruleset *r, const int
                 return -1;
             if(r->vlans[i].allGroupActions == NULL)
                 return -1;
-            if(r->vlans[i].allUnregisteredIndividualActions == NULL)
-                return -1;
             if(r->vlans[i].allUnregisteredGroupActions == NULL)
                 return -1;
 
@@ -233,8 +225,6 @@ static int32_t checkRuleset(const  struct BridgeForwarding_ruleset *r, const int
                 if(!isActionAllowed(r->vlans[i].allIndividualActions[j]))
                     return -2;
                 if(!isActionAllowed(r->vlans[i].allGroupActions[j]))
-                    return -2;
-                if(!isActionAllowed(r->vlans[i].allUnregisteredIndividualActions[j]))
                     return -2;
                 if(!isActionAllowed(r->vlans[i].allUnregisteredGroupActions[j]))
                     return -2;
@@ -312,14 +302,12 @@ struct BridgeForwarding_ruleset* BridgeForwarding_deepCopyRuleset(const struct B
             resu->vlans[i].portActions = calloc(portCnt, sizeof(enum BridgeForwarding_action));
             resu->vlans[i].allIndividualActions = calloc(portCnt, sizeof(enum BridgeForwarding_action));
             resu->vlans[i].allGroupActions = calloc(portCnt, sizeof(enum BridgeForwarding_action));
-            resu->vlans[i].allUnregisteredIndividualActions = calloc(portCnt, sizeof(enum BridgeForwarding_action));
             resu->vlans[i].allUnregisteredGroupActions = calloc(portCnt, sizeof(enum BridgeForwarding_action));
-            if(resu->vlans[i].portActions == NULL || resu->vlans[i].allIndividualActions == NULL || resu->vlans[i].allGroupActions == NULL || resu->vlans[i].allUnregisteredIndividualActions == NULL || resu->vlans[i].allUnregisteredGroupActions == NULL)
+            if(resu->vlans[i].portActions == NULL || resu->vlans[i].allIndividualActions == NULL || resu->vlans[i].allGroupActions == NULL || resu->vlans[i].allUnregisteredGroupActions == NULL)
                 goto fail;
             memcpy(resu->vlans[i].portActions, r->vlans[i].portActions, portCnt * sizeof(enum BridgeForwarding_action));
             memcpy(resu->vlans[i].allIndividualActions, r->vlans[i].allIndividualActions, portCnt * sizeof(enum BridgeForwarding_action));
             memcpy(resu->vlans[i].allGroupActions, r->vlans[i].allGroupActions, portCnt * sizeof(enum BridgeForwarding_action));
-            memcpy(resu->vlans[i].allUnregisteredIndividualActions, r->vlans[i].allUnregisteredIndividualActions, portCnt * sizeof(enum BridgeForwarding_action));
             memcpy(resu->vlans[i].allUnregisteredGroupActions, r->vlans[i].allUnregisteredGroupActions, portCnt * sizeof(enum BridgeForwarding_action));
         }
     }
@@ -391,8 +379,6 @@ void BridgeForwarding_freeRuleset(struct BridgeForwarding_ruleset *r)
                 free(r->vlans[i].allIndividualActions);
             if(r->vlans[i].allGroupActions != NULL)
                 free(r->vlans[i].allGroupActions);
-            if(r->vlans[i].allUnregisteredIndividualActions != NULL)
-                free(r->vlans[i].allUnregisteredIndividualActions);
             if(r->vlans[i].allUnregisteredGroupActions != NULL)
                 free(r->vlans[i].allUnregisteredGroupActions);
         }
@@ -471,19 +457,6 @@ void BridgeForwarding_printCurRuleset(const struct BridgeForwarding_state *s)
         for(j = 0; j < s->portCnt; j++)
         {
             switch(is->ruleset->vlans[i].allGroupActions[j])
-            {
-            case BridgeForwarding_action_Forward: printf("f "); break;
-            case BridgeForwarding_action_Filter: printf("b "); break;
-            case BridgeForwarding_action_NextStage: printf("n "); break;
-            default: printf("? "); break;
-            }
-        }
-        printf("\n");
-
-        printf("  UI: ");
-        for(j = 0; j < s->portCnt; j++)
-        {
-            switch(is->ruleset->vlans[i].allUnregisteredIndividualActions[j])
             {
             case BridgeForwarding_action_Forward: printf("f "); break;
             case BridgeForwarding_action_Filter: printf("b "); break;
@@ -658,44 +631,77 @@ static void packetHandler(const struct Packet_packet *p, void *context)
     for(i = 0; i < st->portCnt; i++)
     {
         struct Packet_packet *toSend;
+        int forward;
 
-        if(v->portActions[i] == BridgeForwarding_action_Filter)
-        {   continue; }
-        else if(isGroupMac && v->allGroupActions[i] == BridgeForwarding_action_Filter)
-        {   continue; }
-        else if(isGroupMac && v->allGroupActions[i] == BridgeForwarding_action_Forward)
-        {   /* ... forward */ }
-        else if(!isGroupMac && v->allIndividualActions[i] == BridgeForwarding_action_Filter)
-        {   continue; }
-        else if(!isGroupMac && v->allIndividualActions[i] == BridgeForwarding_action_Forward)
-        {   /* ... forward */ }
-        else if(f != NULL && f->portActions[i] == BridgeForwarding_action_Filter)
-        {   continue; }
-        else if(f != NULL && f->portActions[i] == BridgeForwarding_action_Forward)
-        {   /* ... forward */ }
-        else if(isGroupMac && v->allUnregisteredGroupActions[i] == BridgeForwarding_action_Filter)
-        {   continue; }
-        else if(isGroupMac && v->allUnregisteredGroupActions[i] == BridgeForwarding_action_Forward)
-        {   /* ... forward */ }
-        else if(!isGroupMac && v->allUnregisteredIndividualActions[i] == BridgeForwarding_action_Filter)
-        {   continue; }
-        else if(!isGroupMac && v->allUnregisteredIndividualActions[i] == BridgeForwarding_action_Forward)
-        {   /* ... forward */ }
-        else if(s != NULL && s->portActions[i] == BridgeForwarding_action_Filter)
-        {   continue; }
-        else if(s != NULL && s->portActions[i] == BridgeForwarding_action_Forward)
-        {   /* ... forward */ }
-        else if(l != NULL && l->outPort == i)
-        {   /* ... forward */ }
-        else if(l != NULL && l->outPort != i)
-        {   continue; }
-        else if(p->port == i)
-        {   continue; } // do not forward to own port on broadcast
+        // never forward on own port
+        if(p->port == i)
+            forward = 0;
+        else if(!isGroupMac)
+        {
+            // Individual address, see IEEE 802.1Q-2011 p. 133 Table 8-7
+
+            // general check if this VLAN is valid on port
+            if(v->portActions[i] == BridgeForwarding_action_Filter)
+                forward = 0;
+            // IF any static entry for a VID allocated to the FID specifies Forward THEN Forward
+            // ELSE IF a static entry for the wildcard VID specifies Forward THEN Forward
+            else if(f != NULL && f->portActions[i] == BridgeForwarding_action_Forward)
+                forward = 1;
+            // ELSE IF any static entry for a VID allocated to the FID specifies Filter THEN Filter
+            // ELSE IF a static entry for the wildcard VID specifies Filter THEN Filter
+            else if(f != NULL && f->portActions[i] == BridgeForwarding_action_Filter)
+                forward = 0;
+            // IF any static entry for a VID allocated to the FID specifies Forward THEN Forward
+            else if(v->allIndividualActions[i] == BridgeForwarding_action_Forward)
+                forward = 1;
+            // ELSE IF any static entry for a VID allocated to the FID specifies Filter THEN Filter
+            else if(v->allIndividualActions[i] == BridgeForwarding_action_Filter)
+                forward = 0;
+            // ELSE IF dynamic (learnt filtering information) entry for the FID specifies Filter THEN Filter
+            else if(s->portActions[i] == BridgeForwarding_action_Filter)
+                forward = 0;
+            // ELSE IF dynamic (learnt filtering information) entry for the FID specifies Filter THEN Filter
+            else if(l != NULL && l->outPort == i)
+                forward = 1;
+            // ELSE IF dynamic (learnt filtering information) entry for the FID specifies Filter THEN Filter
+            else if(l != NULL && l->outPort != i)
+                forward = 0;
+            // ELSE Forward
+            else
+                forward = 1;
+        }
         else
-        {   /* ... forward */ }
+        {
+            // Group address, see IEEE 802.1Q-2011 p. 134 f. Table 8-8 and 8-9
 
+            // general check if this VLAN is valid on port
+            if(v->portActions[i] == BridgeForwarding_action_Filter)
+                forward = 0;
+            // IF a static entry for the specific group address and the frame's VID specifies Forward THEN Forward
+            // ELSE IF a static entry for the specific group address and the wildcard VID specifies Forward THEN Forward
+            else if(f != NULL && f->portActions[i] == BridgeForwarding_action_Forward)
+                forward = 1;
+            // ELSE IF a static entry for the specific group address and the frame's VID specifies Filter THEN Filter
+            // ELSE IF a static entry for the specific group address and the wildcard VID specifies Filter THEN Filter
+            else if(f != NULL && f->portActions[i] == BridgeForwarding_action_Filter)
+                forward = 0;
+            // ELSE IF the Table 8-8 result for "All Group Addresses" is Registered THEN Forward
+            else if(v->allGroupActions[i] == BridgeForwarding_action_Forward)
+                forward = 1;
+            // ELSE IF the Table 8-8 result for "All Unregistered Group Addresses" is Registered THEN Forward
+            else if(v->allUnregisteredGroupActions[i] == BridgeForwarding_action_Forward)
+                forward = 1;
+            // ELSE IF a dynamic (MAC Address Registration) entry for the specific group address and the frame's VID specifies Forward THEN Forward
+            else if(s != NULL && s->portActions[i] == BridgeForwarding_action_Forward)
+                forward = 1;
+            // ELSE Filter
+            else
+                forward = 0;
+        }
 
-        // okay, if we are here, then the packet is supposed to be sent on this port
+        // okay, what is the forwarding decision?
+        if(!forward)
+            continue;
 
         // determine, if it is to be sent tagged or untagged
         if(vid == rs->portDefaultVLANs[i])

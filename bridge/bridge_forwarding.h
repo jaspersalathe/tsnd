@@ -29,7 +29,6 @@ struct BridgeForwarding_vlanRule
     // dynamic not allowed
     enum BridgeForwarding_action *allIndividualActions;
     enum BridgeForwarding_action *allGroupActions;
-    enum BridgeForwarding_action *allUnregisteredIndividualActions;
     enum BridgeForwarding_action *allUnregisteredGroupActions;
 };
 

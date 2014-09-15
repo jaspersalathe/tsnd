@@ -406,12 +406,10 @@ int32_t FDB_updateBridgeForwarding(const struct FDB_state *s, struct BridgeForwa
             rs->vlans[i].portActions = calloc(s->portCnt, sizeof(enum BridgeForwarding_action));
             rs->vlans[i].allIndividualActions = calloc(s->portCnt, sizeof(enum BridgeForwarding_action));
             rs->vlans[i].allGroupActions = calloc(s->portCnt, sizeof(enum BridgeForwarding_action));
-            rs->vlans[i].allUnregisteredIndividualActions = calloc(s->portCnt, sizeof(enum BridgeForwarding_action));
             rs->vlans[i].allUnregisteredGroupActions = calloc(s->portCnt, sizeof(enum BridgeForwarding_action));
             if(   rs->vlans[i].portActions == NULL
                || rs->vlans[i].allIndividualActions == NULL
                || rs->vlans[i].allGroupActions == NULL
-               || rs->vlans[i].allUnregisteredIndividualActions == NULL
                || rs->vlans[i].allUnregisteredGroupActions == NULL)
             {
                 resu = -1;
@@ -450,7 +448,6 @@ int32_t FDB_updateBridgeForwarding(const struct FDB_state *s, struct BridgeForwa
                 // set defaults for the remains
                 rs->vlans[i].allIndividualActions[j] = BridgeForwarding_action_NextStage;
                 rs->vlans[i].allGroupActions[j] = BridgeForwarding_action_NextStage;
-                rs->vlans[i].allUnregisteredIndividualActions[j] = BridgeForwarding_action_NextStage;
                 rs->vlans[i].allUnregisteredGroupActions[j] = BridgeForwarding_action_NextStage;
             }
         }
@@ -568,8 +565,6 @@ vlanEnd:
                 targetActions = rs->vlans[vIdx].allIndividualActions;
             else if(curAddrType == FDB_AddressType_AllGroup)
                 targetActions = rs->vlans[vIdx].allGroupActions;
-            else if(curAddrType == FDB_AddressType_AllUnregIndividual)
-                targetActions = rs->vlans[vIdx].allUnregisteredIndividualActions;
             else if(curAddrType == FDB_AddressType_AllUnregGroup)
                 targetActions = rs->vlans[vIdx].allUnregisteredGroupActions;
             else
@@ -725,7 +720,6 @@ static int checkRule(const struct FDB_rule *r, const int32_t portCnt)
         {
         case FDB_AddressType_AllIndividual:
         case FDB_AddressType_AllGroup:
-        case FDB_AddressType_AllUnregIndividual:
         case FDB_AddressType_AllUnregGroup:
             break;
         case FDB_AddressType_Individual:
@@ -778,7 +772,6 @@ static int checkRule(const struct FDB_rule *r, const int32_t portCnt)
                 return 0;
             break;
         case FDB_AddressType_AllIndividual:
-        case FDB_AddressType_AllUnregIndividual:
         default:
             return 0;
         }

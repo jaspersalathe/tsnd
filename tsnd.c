@@ -91,13 +91,11 @@ void init_bridgenode_testBridgeForwarding(struct HandlerTable_table *handlerTabl
     vr[0].portActions = allEnActs;
     vr[0].allIndividualActions = allUnActs;
     vr[0].allGroupActions = allUnActs;
-    vr[0].allUnregisteredIndividualActions = allUnActs;
     vr[0].allUnregisteredGroupActions = acts1;
     vr[1].vid = 4;
     vr[1].portActions = allEnActs;
     vr[1].allIndividualActions = allUnActs;
     vr[1].allGroupActions = allUnActs;
-    vr[1].allUnregisteredIndividualActions = allUnActs;
     vr[1].allUnregisteredGroupActions = allUnActs;
     rs.vlans = vr;
     rs.vlanCnt = sizeof(vr) / sizeof(struct BridgeForwarding_vlanRule);

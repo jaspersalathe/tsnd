@@ -27,7 +27,6 @@ enum FDB_AddressType
 {
     FDB_AddressType_AllIndividual,
     FDB_AddressType_AllGroup,
-    FDB_AddressType_AllUnregIndividual,
     FDB_AddressType_AllUnregGroup,
     FDB_AddressType_Individual,
     FDB_AddressType_Group
