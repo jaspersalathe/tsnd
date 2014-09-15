@@ -138,11 +138,14 @@ void init_bridgenode_testFDB(struct HandlerTable_table *handlerTable, struct Por
 
     if(BridgeForwarding_init(&bfState, handlerTable, ports, portCnt) != 0)
         exit(1);
+    BridgeForwarding_printCurRuleset(&bfState);
 
-    if(FDB_init(&fdbState, &bfState, portCnt) != 0)
+    if(FDB_init(&fdbState, portCnt) != 0)
         exit(1);
 
-    // add default VLAN
+    // testcases for static vlan rules:
+
+    // add default VLAN (all untagged)
     r.type = FDB_RuleType_StaticVLANRegistration;
     r.rule.staticVLANRegistration.vid = ETHERNET_VID_DEFAULT;
     for(i = 0; i < portCnt; i++)
@@ -150,22 +153,153 @@ void init_bridgenode_testFDB(struct HandlerTable_table *handlerTable, struct Por
         pm[i].filter = FDB_PortMapResult_Forward;
         pm[i].forwardUntagged = 1;
     }
-    pm[0].forwardUntagged = 0;
     r.rule.staticVLANRegistration.portMap = pm;
     if(FDB_addRule(&fdbState, &r) != 0)
         exit(1);
 
+    // add VLAN 2 (all tagged)
     r.type = FDB_RuleType_StaticVLANRegistration;
-    r.rule.staticVLANRegistration.vid = 4;
+    r.rule.staticVLANRegistration.vid = 2;
     for(i = 0; i < portCnt; i++)
     {
         pm[i].filter = FDB_PortMapResult_Forward;
         pm[i].forwardUntagged = 0;
     }
-    pm[0].forwardUntagged = 1;
     r.rule.staticVLANRegistration.portMap = pm;
     if(FDB_addRule(&fdbState, &r) != 0)
         exit(1);
+
+    // testcases for static mac rules
+
+    // add static mac rule for stp (01:80:c2:00:00:00; filter all)
+    r.type = FDB_RuleType_StaticFiltering;
+    r.rule.staticFiltering.mac[0] = 0x01;
+    r.rule.staticFiltering.mac[1] = 0x80;
+    r.rule.staticFiltering.mac[2] = 0xc2;
+    r.rule.staticFiltering.mac[3] = 0x00;
+    r.rule.staticFiltering.mac[4] = 0x00;
+    r.rule.staticFiltering.mac[5] = 0x00;
+    r.rule.staticFiltering.addrType = FDB_AddressType_Group;
+    r.rule.staticFiltering.vid = 1;
+    for(i = 0; i < portCnt; i++)
+        pm[i].filter = FDB_PortMapResult_Filter;
+    r.rule.staticFiltering.portMap = pm;
+    if(FDB_addRule(&fdbState, &r) != 0)
+        exit(1);
+
+//    // add static rule for all unregistered Individual Adresses (filter all)
+//    r.type = FDB_RuleType_StaticFiltering;
+//    r.rule.staticFiltering.addrType = FDB_AddressType_AllUnregIndividual;
+//    r.rule.staticFiltering.vid = 1;
+//    for(i = 0; i < portCnt; i++)
+//        pm[i].filter = FDB_PortMapResult_Filter;
+//    r.rule.staticFiltering.portMap = pm;
+//    if(FDB_addRule(&fdbState, &r) != 0)
+//        exit(1);
+//
+//    // add known devices
+//    r.type = FDB_RuleType_StaticFiltering;
+//    r.rule.staticFiltering.addrType = FDB_AddressType_Individual;
+//    r.rule.staticFiltering.mac[0] = 0x10;
+//    r.rule.staticFiltering.mac[1] = 0x0b;
+//    r.rule.staticFiltering.mac[2] = 0xa9;
+//    r.rule.staticFiltering.mac[3] = 0x8a;
+//    r.rule.staticFiltering.mac[4] = 0xc8;
+//    r.rule.staticFiltering.mac[5] = 0x24;
+//    r.rule.staticFiltering.vid = 1;
+//    for(i = 0; i < portCnt; i++)
+//        pm[i].filter = FDB_PortMapResult_Filter;
+//    pm[1].filter = FDB_PortMapResult_Forward;
+//    r.rule.staticFiltering.portMap = pm;
+//    if(FDB_addRule(&fdbState, &r) != 0)
+//        exit(1);
+//
+//    r.type = FDB_RuleType_StaticFiltering;
+//    r.rule.staticFiltering.addrType = FDB_AddressType_Individual;
+//    r.rule.staticFiltering.mac[0] = 0xc0;
+//    r.rule.staticFiltering.mac[1] = 0x25;
+//    r.rule.staticFiltering.mac[2] = 0x06;
+//    r.rule.staticFiltering.mac[3] = 0x99;
+//    r.rule.staticFiltering.mac[4] = 0xe6;
+//    r.rule.staticFiltering.mac[5] = 0xb2;
+//    r.rule.staticFiltering.vid = 1;
+//    for(i = 0; i < portCnt; i++)
+//        pm[i].filter = FDB_PortMapResult_Filter;
+//    pm[0].filter = FDB_PortMapResult_Forward;
+//    r.rule.staticFiltering.portMap = pm;
+//    if(FDB_addRule(&fdbState, &r) != 0)
+//        exit(1);
+//
+//    r.type = FDB_RuleType_StaticFiltering;
+//    r.rule.staticFiltering.addrType = FDB_AddressType_Individual;
+//    r.rule.staticFiltering.mac[0] = 0x04;
+//    r.rule.staticFiltering.mac[1] = 0x7d;
+//    r.rule.staticFiltering.mac[2] = 0x7b;
+//    r.rule.staticFiltering.mac[3] = 0x65;
+//    r.rule.staticFiltering.mac[4] = 0x32;
+//    r.rule.staticFiltering.mac[5] = 0x4d;
+//    r.rule.staticFiltering.vid = 1;
+//    for(i = 0; i < portCnt; i++)
+//        pm[i].filter = FDB_PortMapResult_Filter;
+//    pm[2].filter = FDB_PortMapResult_Forward;
+//    r.rule.staticFiltering.portMap = pm;
+//    if(FDB_addRule(&fdbState, &r) != 0)
+//        exit(1);
+
+    // testcases for dynamic wildcard filtering
+    // add static rule for all unregistered Group Adresses (forward only port 2)
+    r.type = FDB_RuleType_MACAddressRegistration;
+    r.rule.macAddressRegistration.addrType = FDB_AddressType_AllUnregGroup;
+    r.rule.macAddressRegistration.vid = 1;
+    for(i = 0; i < portCnt; i++)
+        pm[i].filter = FDB_PortMapResult_Dynamic;
+    pm[2].filter = FDB_PortMapResult_Forward;
+    r.rule.macAddressRegistration.portMap = pm;
+    if(FDB_addRule(&fdbState, &r) != 0)
+        exit(1);
+
+    // add known devices
+    r.type = FDB_RuleType_DynamicFiltering;
+    r.rule.dynamicFiltering.mac[0] = 0x10;
+    r.rule.dynamicFiltering.mac[1] = 0x0b;
+    r.rule.dynamicFiltering.mac[2] = 0xa9;
+    r.rule.dynamicFiltering.mac[3] = 0x8a;
+    r.rule.dynamicFiltering.mac[4] = 0xc8;
+    r.rule.dynamicFiltering.mac[5] = 0x24;
+    r.rule.dynamicFiltering.vid = 1;
+    r.rule.dynamicFiltering.portMapPort = 1;
+    if(FDB_addRule(&fdbState, &r) != 0)
+        exit(1);
+
+    r.type = FDB_RuleType_DynamicFiltering;
+    r.rule.dynamicFiltering.mac[0] = 0xc0;
+    r.rule.dynamicFiltering.mac[1] = 0x25;
+    r.rule.dynamicFiltering.mac[2] = 0x06;
+    r.rule.dynamicFiltering.mac[3] = 0x99;
+    r.rule.dynamicFiltering.mac[4] = 0xe6;
+    r.rule.dynamicFiltering.mac[5] = 0xb2;
+    r.rule.dynamicFiltering.vid = 1;
+    r.rule.dynamicFiltering.portMapPort = 0;
+    if(FDB_addRule(&fdbState, &r) != 0)
+        exit(1);
+
+    r.type = FDB_RuleType_DynamicFiltering;
+    r.rule.dynamicFiltering.mac[0] = 0x04;
+    r.rule.dynamicFiltering.mac[1] = 0x7d;
+    r.rule.dynamicFiltering.mac[2] = 0x7b;
+    r.rule.dynamicFiltering.mac[3] = 0x65;
+    r.rule.dynamicFiltering.mac[4] = 0x32;
+    r.rule.dynamicFiltering.mac[5] = 0x4d;
+    r.rule.dynamicFiltering.vid = 1;
+    r.rule.dynamicFiltering.portMapPort = 2;
+    if(FDB_addRule(&fdbState, &r) != 0)
+        exit(1);
+
+
+    // update ruleset in BridgeForwarding
+    if(FDB_updateBridgeForwarding(&fdbState, &bfState) != 0)
+        exit(1);
+    BridgeForwarding_printCurRuleset(&bfState);
 
     free(pm);
 }
