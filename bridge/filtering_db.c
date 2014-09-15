@@ -14,7 +14,6 @@
 static int32_t cmpRules(const struct FDB_rule *r1, const struct FDB_rule *r2, const int32_t portCnt);
 static void freeRuleInternalMemory(struct FDB_rule *r);
 static int32_t copyRuleAllocInternalMemory(struct FDB_rule *to, const struct FDB_rule *from, const int32_t portCnt);
-static int32_t updateBridgeForwarding(const struct FDB_state *s);
 static int checkRule(const struct FDB_rule *r, const int32_t portCnt);
 static int checkRuleConfilct(const struct FDB_state *s, const struct FDB_rule *r);
 
@@ -24,13 +23,12 @@ static int checkRuleConfilct(const struct FDB_state *s, const struct FDB_rule *r
  *            -1: pointer NULL
  *
  */
-int32_t FDB_init(struct FDB_state *state, struct BridgeForwarding_state *bridgeForwarding, uint32_t portCnt)
+int32_t FDB_init(struct FDB_state *state, uint32_t portCnt)
 {
-    if(state == NULL || bridgeForwarding == NULL)
+    if(state == NULL)
         return -1;
 
     memset(state, 0, sizeof(struct FDB_state));
-    state->bridgeForwarding = bridgeForwarding;
     state->portCnt = portCnt;
     state->ruleCnt = 0;
     state->ruleAllocCnt = 0;
@@ -77,10 +75,6 @@ int32_t FDB_addRule(struct FDB_state *state, struct FDB_rule *rule)
         return resu;
 
     state->ruleCnt++;
-
-    resu = updateBridgeForwarding(state);
-    if(resu != 0)
-        return resu;
 
     return 0;
 }
@@ -334,7 +328,7 @@ static int32_t copyRuleAllocInternalMemory(struct FDB_rule *to, const struct FDB
  *            -1: could not allocate memory
  *            -2: error accessing BridgeForwarding
  */
-static int32_t updateBridgeForwarding(const struct FDB_state *s)
+int32_t FDB_updateBridgeForwarding(const struct FDB_state *s, struct BridgeForwarding_state *bf)
 {
     uint32_t i, j;
     int32_t resu = 0;
@@ -491,7 +485,7 @@ vlanEnd:
             if(s->rules[i].type != FDB_RuleType_StaticFiltering)
                 continue;
             if(   s->rules[i].rule.staticFiltering.addrType != FDB_AddressType_Individual
-               || s->rules[i].rule.staticFiltering.addrType != FDB_AddressType_Group)
+               && s->rules[i].rule.staticFiltering.addrType != FDB_AddressType_Group)
                 continue;
 
             memcpy(rs->firstStageRules[rs->firstStageRuleCnt].mac, s->rules[i].rule.staticFiltering.mac, ETHERNET_MAC_LEN);
@@ -500,7 +494,7 @@ vlanEnd:
             if(rs->firstStageRules[rs->firstStageRuleCnt].vid == ETHERNET_VID_WILDCARD)
                 rs->firstStageRules[rs->firstStageRuleCnt].vidMask = 0x0000;
             else
-                rs->firstStageRules[rs->firstStageRuleCnt].vid = ETHERNET_VID_MASK;
+                rs->firstStageRules[rs->firstStageRuleCnt].vidMask = ETHERNET_VID_MASK;
 
             curPortMap = s->rules[i].rule.staticFiltering.portMap;
             rs->firstStageRules[rs->firstStageRuleCnt].portActions = calloc(s->portCnt, sizeof(enum BridgeForwarding_action));
@@ -685,7 +679,7 @@ macEnd:
             goto end;
     }
 
-    if(BridgeForwarding_updateRuleset(s->bridgeForwarding, rs) != 0)
+    if(BridgeForwarding_updateRuleset(bf, rs) != 0)
         resu = -2;
 
 end:

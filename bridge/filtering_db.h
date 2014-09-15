@@ -119,7 +119,6 @@ struct FDB_rule
 struct FDB_state
 {
     uint32_t portCnt;
-    struct BridgeForwarding_state *bridgeForwarding;
 
     struct FDB_rule *rules;
     uint32_t ruleCnt;
@@ -132,7 +131,7 @@ struct FDB_state
  *            -1: pointer NULL
  *
  */
-int32_t FDB_init(struct FDB_state *state, struct BridgeForwarding_state *bridgeForwarding, uint32_t portCnt);
+int32_t FDB_init(struct FDB_state *state, uint32_t portCnt);
 
 /*
  * Return values:
@@ -153,5 +152,14 @@ int32_t FDB_delRule(struct FDB_state *state, struct FDB_rule *rule);
 
 uint32_t FDB_getRuleCnt(struct FDB_state *state);
 struct FDB_rule *FDB_getRuleByIdx(struct FDB_state *state, uint32_t idx);
+
+
+/*
+ * Return values:
+ *             0: success
+ *            -1: could not allocate memory
+ *            -2: error accessing BridgeForwarding
+ */
+int32_t FDB_updateBridgeForwarding(const struct FDB_state *state, struct BridgeForwarding_state *bf);
 
 #endif /* FILTERING_DB_H_ */
