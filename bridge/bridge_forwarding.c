@@ -418,6 +418,140 @@ void BridgeForwarding_freeRuleset(struct BridgeForwarding_ruleset *r)
     free(r);
 }
 
+void BridgeForwarding_printCurRuleset(const struct BridgeForwarding_state *s)
+{
+    struct internalState *is;
+    int32_t i, j;
+
+    if(s == NULL || s->state == NULL)
+        return;
+
+    is = s->state;
+
+    if(is->ruleset == NULL)
+        return;
+
+    printf("current ruleset (%"PRIi32" ports)\n", s->portCnt);
+
+    printf("default Port VLANs:\n");
+    for(i = 0; i < s->portCnt; i++)
+        printf("0x%03"PRIx16" ", is->ruleset->portDefaultVLANs[i]);
+    printf("\n");
+
+    printf("VLAN rules:\n");
+    for(i = 0; i < is->ruleset->vlanCnt; i++)
+    {
+        printf(" vid: 0x%03"PRIx16"\n  portMap: ", is->ruleset->vlans[i].vid);
+
+        for(j = 0; j < s->portCnt; j++)
+        {
+            switch(is->ruleset->vlans[i].portActions[j])
+            {
+            case BridgeForwarding_action_Forward: printf("f "); break;
+            case BridgeForwarding_action_Filter: printf("b "); break;
+            default: printf("? "); break;
+            }
+        }
+        printf("\n");
+
+        printf("  AI: ");
+        for(j = 0; j < s->portCnt; j++)
+        {
+            switch(is->ruleset->vlans[i].allIndividualActions[j])
+            {
+            case BridgeForwarding_action_Forward: printf("f "); break;
+            case BridgeForwarding_action_Filter: printf("b "); break;
+            case BridgeForwarding_action_NextStage: printf("n "); break;
+            default: printf("? "); break;
+            }
+        }
+        printf("\n");
+
+        printf("  AG: ");
+        for(j = 0; j < s->portCnt; j++)
+        {
+            switch(is->ruleset->vlans[i].allGroupActions[j])
+            {
+            case BridgeForwarding_action_Forward: printf("f "); break;
+            case BridgeForwarding_action_Filter: printf("b "); break;
+            case BridgeForwarding_action_NextStage: printf("n "); break;
+            default: printf("? "); break;
+            }
+        }
+        printf("\n");
+
+        printf("  UI: ");
+        for(j = 0; j < s->portCnt; j++)
+        {
+            switch(is->ruleset->vlans[i].allUnregisteredIndividualActions[j])
+            {
+            case BridgeForwarding_action_Forward: printf("f "); break;
+            case BridgeForwarding_action_Filter: printf("b "); break;
+            case BridgeForwarding_action_NextStage: printf("n "); break;
+            default: printf("? "); break;
+            }
+        }
+        printf("\n");
+
+        printf("  UG: ");
+        for(j = 0; j < s->portCnt; j++)
+        {
+            switch(is->ruleset->vlans[i].allUnregisteredGroupActions[j])
+            {
+            case BridgeForwarding_action_Forward: printf("f "); break;
+            case BridgeForwarding_action_Filter: printf("b "); break;
+            case BridgeForwarding_action_NextStage: printf("n "); break;
+            default: printf("? "); break;
+            }
+        }
+        printf("\n");
+    }
+    printf("\n");
+
+    printf("First stage rules:\n");
+    for(i = 0; i < is->ruleset->firstStageRuleCnt; i++)
+    {
+        printf(" mac: [%02"PRIx8":%02"PRIx8":%02"PRIx8":%02"PRIx8":%02"PRIx8":%02"PRIx8"] & [%02"PRIx8":%02"PRIx8":%02"PRIx8":%02"PRIx8":%02"PRIx8":%02"PRIx8"] vid: 0x%03"PRIx16" & 0x%03"PRIx16" prio: %"PRIu8"\n  portMap: ",
+                is->ruleset->firstStageRules[i].mac[0], is->ruleset->firstStageRules[i].mac[1], is->ruleset->firstStageRules[i].mac[2], is->ruleset->firstStageRules[i].mac[3], is->ruleset->firstStageRules[i].mac[4], is->ruleset->firstStageRules[i].mac[5],
+                is->ruleset->firstStageRules[i].macMask[0], is->ruleset->firstStageRules[i].macMask[1], is->ruleset->firstStageRules[i].macMask[2], is->ruleset->firstStageRules[i].macMask[3], is->ruleset->firstStageRules[i].macMask[4], is->ruleset->firstStageRules[i].macMask[5],
+                is->ruleset->firstStageRules[i].vid, is->ruleset->firstStageRules[i].vidMask, is->ruleset->firstStageRules[i].prio);
+
+        for(j = 0; j < s->portCnt; j++)
+        {
+            switch(is->ruleset->firstStageRules[i].portActions[j])
+            {
+            case BridgeForwarding_action_Forward: printf("f "); break;
+            case BridgeForwarding_action_Filter: printf("b "); break;
+            case BridgeForwarding_action_NextStage: printf("n "); break;
+            default: printf("? "); break;
+            }
+        }
+        printf("\n");
+    }
+    printf("\n");
+
+    printf("Second stage rules:\n");
+    for(i = 0; i < is->ruleset->secondStageRuleCnt; i++)
+    {
+        printf(" mac: [%02"PRIx8":%02"PRIx8":%02"PRIx8":%02"PRIx8":%02"PRIx8":%02"PRIx8"] & [%02"PRIx8":%02"PRIx8":%02"PRIx8":%02"PRIx8":%02"PRIx8":%02"PRIx8"] vid: 0x%03"PRIx16" & 0x%03"PRIx16" prio: %"PRIu8"\n  portMap: ",
+                is->ruleset->secondStageRules[i].mac[0], is->ruleset->secondStageRules[i].mac[1], is->ruleset->secondStageRules[i].mac[2], is->ruleset->secondStageRules[i].mac[3], is->ruleset->secondStageRules[i].mac[4], is->ruleset->secondStageRules[i].mac[5],
+                is->ruleset->secondStageRules[i].macMask[0], is->ruleset->secondStageRules[i].macMask[1], is->ruleset->secondStageRules[i].macMask[2], is->ruleset->secondStageRules[i].macMask[3], is->ruleset->secondStageRules[i].macMask[4], is->ruleset->secondStageRules[i].macMask[5],
+                is->ruleset->secondStageRules[i].vid, is->ruleset->secondStageRules[i].vidMask, is->ruleset->secondStageRules[i].prio);
+
+        for(j = 0; j < s->portCnt; j++)
+        {
+            switch(is->ruleset->secondStageRules[i].portActions[j])
+            {
+            case BridgeForwarding_action_Forward: printf("f "); break;
+            case BridgeForwarding_action_Filter: printf("b "); break;
+            default: printf("? "); break;
+            }
+        }
+        printf("\n");
+    }
+    printf("\n");
+}
+
 
 static void packetHandler(const struct Packet_packet *p, void *context)
 {
