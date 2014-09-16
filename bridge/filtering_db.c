@@ -445,9 +445,9 @@ int32_t FDB_updateBridgeForwarding(const struct FDB_state *s, struct BridgeForwa
                 else
                     rs->vlans[i].portActions[j] = BridgeForwarding_action_Filter;
 
-                // set defaults for the remains
+                // set defaults for the remains (IEEE 802.1Q-2011 p. 129 chapter 8.8.6)
                 rs->vlans[i].allIndividualActions[j] = BridgeForwarding_action_NextStage;
-                rs->vlans[i].allGroupActions[j] = BridgeForwarding_action_NextStage;
+                rs->vlans[i].allGroupActions[j] = BridgeForwarding_action_Forward;
                 rs->vlans[i].allUnregisteredGroupActions[j] = BridgeForwarding_action_NextStage;
             }
         }
@@ -573,10 +573,18 @@ vlanEnd:
             // translate port actions
             for(j = 0; j < s->portCnt; j++)
             {
-                if(curPortMap[j].filter == FDB_PortMapResult_Forward)
+                switch(curPortMap[j].filter)
+                {
+                case FDB_PortMapResult_Forward:
                     targetActions[j] = BridgeForwarding_action_Forward;
-                else if(curPortMap[j].filter == FDB_PortMapResult_Filter)
+                    break;
+                case FDB_PortMapResult_Filter:
                     targetActions[j] = BridgeForwarding_action_Filter;
+                    break;
+                case FDB_PortMapResult_Dynamic:
+                    targetActions[j] = BridgeForwarding_action_NextStage;
+                    break;
+                }
             }
         }
 

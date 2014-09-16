@@ -78,7 +78,7 @@ struct FDB_MACAddressRegistration
 {
     uint8_t mac[ETHERNET_MAC_LEN];
     enum FDB_AddressType addrType;
-    // not allowed: AllUnregIndividual, AllIndividual
+    // not allowed: AllIndividual
     uint16_t vid;
     struct FDB_PortMapEntry *portMap;
     uint8_t prio; // to distinguish the queue to be used for forwarding
