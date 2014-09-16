@@ -658,10 +658,11 @@ static void packetHandler(const struct Packet_packet *p, void *context)
             else if(v->allIndividualActions[i] == BridgeForwarding_action_Filter)
                 forward = 0;
             // ELSE IF dynamic (learnt filtering information) entry for the FID specifies Filter THEN Filter
-            else if(s->portActions[i] == BridgeForwarding_action_Filter)
+            else if(s != NULL && s->portActions[i] == BridgeForwarding_action_Filter)
                 forward = 0;
             // ELSE IF dynamic (learnt filtering information) entry for the FID specifies Filter THEN Filter
-            else if(l != NULL && l->outPort == i)
+            // if this case does not exist, then second stage entry may be overwritten by selflearned entry
+            else if(s != NULL && s->portActions[i] == BridgeForwarding_action_Forward)
                 forward = 1;
             // ELSE IF dynamic (learnt filtering information) entry for the FID specifies Filter THEN Filter
             else if(l != NULL && l->outPort != i)
@@ -737,6 +738,9 @@ static void learnMACNotifier(struct BridgeForwarding_state *state, const uint8_t
     // only learn individual mac
     if(Ethernet_isGroupMac(mac))
         return;
+
+    // TODO: do not learn macs, which are in ruleset!
+    // TODO: reset learned macs on update of ruleset!
 
     idx = matchLearnedMAC(state, mac);
     is = state->state;
