@@ -119,17 +119,17 @@ int32_t Port_open(const char *devName, struct Port *port)
     memset(&ifr, 0, sizeof(ifr));
     strcpy(ifr.ifr_name, port->devName);
     if(ioctl(port->rawFd, SIOCGIFFLAGS, &ifr))
-    {   fprintf(stderr, "error: %d\n", errno); return -6; }
+    {   fprintf(stderr, "error1: %d, %s\n", errno, strerror(errno)); return -6; }
     ifr.ifr_flags |= IFF_PROMISC;
     if(ioctl(port->rawFd, SIOCSIFFLAGS, &ifr))
-        return -5;
+    {   fprintf(stderr, "error2: %d, %s\n", errno, strerror(errno)); return -5; }
 
     // set promisciuous mode for this socket
     pReq.mr_ifindex = port->rawFd;
     pReq.mr_type = PACKET_MR_PROMISC;
     pReq.mr_alen = 0;
     if(setsockopt(port->rawFd, SOL_PACKET, PACKET_ADD_MEMBERSHIP, &pReq, sizeof(pReq)))
-        return -5;
+    {   fprintf(stderr, "error3: %d %s\n", errno, strerror(errno)); return -5; }
 
     return 0;
 }
@@ -200,7 +200,6 @@ int32_t Port_send(struct Port *port, struct Packet_packet *packet)
     int resu;
     struct msghdr hdr;
     struct iovec iov;
-    char control[256];
 
     if(port == NULL || packet == NULL)
         return -1;
@@ -212,8 +211,8 @@ int32_t Port_send(struct Port *port, struct Packet_packet *packet)
     hdr.msg_iov = &iov;
     hdr.msg_iovlen = 1;
     memset(control, 0, sizeof(control));
-    hdr.msg_control = control;
-    hdr.msg_controllen = sizeof(control);
+    hdr.msg_control = NULL;
+    hdr.msg_controllen = 0;
 
     resu = sendmsg(port->rawFd, &hdr, 0);
 
